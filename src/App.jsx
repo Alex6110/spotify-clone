@@ -25,6 +25,7 @@ import LikedSongs from './pages/LikedSongs';
 import CreatePlaylist from './pages/CreatePlaylist';
 import Offline from './pages/Offline';
 import Upload from './pages/Upload';
+import Diagnostics from './pages/Diagnostics';
 
 function useWindowSize() {
   const [width, setWidth] = useState(window.innerWidth);
@@ -93,6 +94,7 @@ function App() {
                 <Route path="/liked" element={<LikedSongs />} />
                 <Route path="/offline" element={<Offline />} />
                 <Route path="/upload" element={<Upload />} />
+                <Route path="/diagnostica" element={<Diagnostics />} />
               </Route>
             </Route>
 

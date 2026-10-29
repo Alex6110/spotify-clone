@@ -6,7 +6,7 @@
  *   altrimenti passa in rete come sempre. I brani vengono salvati dalla pagina (src/lib/offline.js).
  * Il nome della cache audio NON cambia con le versioni: aggiornare l'app non deve cancellare i download.
  */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL_CACHE = `musica-shell-${VERSION}`;
 const ASSETS_CACHE = 'musica-assets';
 const API_CACHE = 'musica-api';
@@ -16,7 +16,8 @@ const SHELL_FILES = ['/', '/manifest.webmanifest', '/favicon.svg', '/cover-place
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE)
-      .then((cache) => cache.addAll(SHELL_FILES))
+      // un file mancante (404) non deve impedire di salvare gli altri: addAll fallirebbe in blocco
+      .then((cache) => Promise.allSettled(SHELL_FILES.map((f) => cache.add(f))))
       .catch(() => { /* senza rete l'installazione riprova al prossimo avvio */ })
       .then(() => self.skipWaiting()),
   );

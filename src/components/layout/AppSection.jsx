@@ -45,6 +45,11 @@ const AppSection = ({ onNavigate }) => {
         <span><strong>Carica musica</strong><small>Aggiungi brani o album alla libreria</small></span>
       </Link>
 
+      <Link to="/diagnostica" className="app-link" onClick={onNavigate}>
+        <Smartphone size={18} />
+        <span><strong>Diagnostica schermo</strong><small>Per segnalare problemi di layout</small></span>
+      </Link>
+
       {isOfflineSupported() && (
         <>
           <Link to="/offline" className="app-link" onClick={onNavigate}>

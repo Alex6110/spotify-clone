@@ -242,3 +242,10 @@ a.pill-btn { display: inline-flex; align-items: center; gap: 8px; }
 .upload-bar span { display: block; height: 100%; background: var(--accent); transition: width .2s; }
 .upload-summary { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: var(--radius-container); background: var(--panel-2); }
 .upload-summary .pill-btn { align-self: flex-start; margin-top: 6px; }
+
+/* ---------- Diagnostica ---------- */
+.diag-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.diag-table th, .diag-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.diag-table th { color: var(--text-2); font-weight: 500; width: 46%; }
+.diag-table td { overflow-wrap: anywhere; }
+.diag-probes { position: absolute; left: -9999px; top: 0; width: 1px; visibility: hidden; }

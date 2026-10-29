@@ -143,7 +143,9 @@ async function main() {
     // --- tag dei file nuovi/modificati ---
     const parsed = await mapLimit(changed, CONCURRENCY, async (f) => {
       try {
-        const md = await mm.parseFile(f.abs, { skipCovers: true });
+        let md = await mm.parseFile(f.abs, { skipCovers: true });
+        // senza intestazione VBR la durata può mancare: rileggo scorrendo tutto il file (solo per questi brani)
+        if (!md.format.duration) md = await mm.parseFile(f.abs, { skipCovers: true, duration: true });
         return { f, md };
       } catch (e) {
         stats.unreadable++;
