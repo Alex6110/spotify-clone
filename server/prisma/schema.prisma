@@ -1,0 +1,144 @@
+// Schema v2. SQLite ora, Postgres sul server di casa: basta cambiare provider e DATABASE_URL.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  name         String
+  onboarded    Boolean  @default(false)
+  favGenres    String   @default("[]") // JSON: ["rock","jazz"]
+  settings     String   @default("{}") // JSON: { accent, radius, ... }
+  createdAt    DateTime @default(now())
+
+  playback  PlaybackState?
+  likes     Like[]
+  listens   Listen[]
+  follows   Follow[]
+  playlists Playlist[]
+}
+
+model Artist {
+  id    Int     @id @default(autoincrement())
+  name  String
+  key   String  @unique // nome normalizzato (senza maiuscole/accenti/punteggiatura)
+  photo String?
+
+  albums  Album[]
+  tracks  Track[]
+  follows Follow[]
+}
+
+model Album {
+  id       Int     @id @default(autoincrement())
+  title    String
+  key      String
+  year     Int?
+  genre    String?
+  cover    String?
+  artistId Int
+  artist   Artist  @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  addedAt  DateTime @default(now())
+  tracks   Track[]
+
+  @@unique([artistId, key])
+  @@index([addedAt])
+}
+
+model Track {
+  id         Int     @id @default(autoincrement())
+  title      String
+  titleKey   String
+  relPath    String  @unique // percorso relativo a MUSIC_DIR: l'ID resta stabile tra una scansione e l'altra
+  trackNo    Int?
+  discNo     Int?
+  durationMs Int     @default(0)
+  format     String
+  bitrate    Int?
+  size       Int     @default(0)
+  mtimeMs    Float   @default(0)
+  albumId    Int
+  artistId   Int
+  album      Album   @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  artist     Artist  @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  likes     Like[]
+  listens   Listen[]
+  playlists PlaylistTrack[]
+
+  @@index([albumId])
+  @@index([artistId])
+  @@index([titleKey])
+}
+
+model Like {
+  userId  Int
+  trackId Int
+  at      DateTime @default(now())
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track   Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([userId, trackId])
+}
+
+model Follow {
+  userId   Int
+  artistId Int
+  at       DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artist   Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@id([userId, artistId])
+}
+
+model Listen {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  trackId   Int
+  playedMs  Int
+  completed Boolean  @default(false)
+  at        DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([userId, at])
+  @@index([trackId])
+}
+
+model Playlist {
+  id        Int             @id @default(autoincrement())
+  userId    Int
+  name      String
+  createdAt DateTime        @default(now())
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tracks    PlaylistTrack[]
+
+  @@index([userId])
+}
+
+model PlaylistTrack {
+  playlistId Int
+  trackId    Int
+  position   Int
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([playlistId, position])
+  @@index([trackId])
+}
+
+model PlaybackState {
+  userId      Int      @id
+  trackId     Int?
+  currentTime Float    @default(0)
+  queue       String   @default("[]") // JSON: solo ID dei brani
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

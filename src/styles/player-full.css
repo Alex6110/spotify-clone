@@ -1,0 +1,271 @@
+/* --- FULL PLAYER MOBILE OVERLAY --- */
+.full-player-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between; 
+  align-items: center;
+  /* Padding dinamico: si adatta tra 20px (schermi piccoli) e 60px (schermi grandi) */
+  padding: calc(clamp(20px, 5vh, 60px) + env(safe-area-inset-top)) 25px 
+           calc(clamp(20px, 5vh, 60px) + env(safe-area-inset-bottom)) 25px;
+  color: white;
+  pointer-events: auto;
+  background-color: #121212;
+  box-sizing: border-box; 
+}
+
+@media (max-height: 700px) {
+  .full-player-overlay {
+    justify-content: space-between; /* Forza gli elementi verso i bordi */
+    gap: 10px; 
+    padding: calc(10px + env(safe-area-inset-top)) 20px 15px 20px;
+  }
+}
+
+.full-player-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 45px;
+  flex-shrink: 0;
+  margin: 0; /* Reset margini */
+}
+
+@media (max-height: 700px) {
+  .full-player-header {
+    height: 35px !important; /* Da 45px a 35px */
+  }
+}
+
+.header-status {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* AREA COPERTINA */
+.full-player-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 3; /* Peso dominante per schermi grandi */
+  margin-bottom: clamp(15px, 4vh, 30px); 
+  min-height: 0; 
+}
+
+.full-cover-art {
+  width: 100%;
+  /* Usiamo vh per entrambi così il quadrato scala in base all'altezza disponibile */
+  max-width: 40vh; 
+  max-height: 40vh;
+  aspect-ratio: 1/1 !important; 
+  border-radius: 12px;
+  object-fit: contain; /* Garantisce che l'immagine non venga mai tagliata */
+  box-shadow: 0 15px 50px rgba(0,0,0,0.6);
+  flex-shrink: 1; /* Fondamentale per evitare collisioni */
+}
+
+/* OTTIMIZZAZIONE PER SCHERMI CORTI (es. iPhone SE o schermi piccoli) */
+@media (max-height: 700px) {
+  .full-player-main {
+    flex: 2; /* Permette alla cover di prendersi lo spazio centrale e spingere il resto */
+    margin-top: 5px;
+    margin-bottom: 10px;
+  }
+  .full-cover-art {
+    /* Leggermente più grande per riempire il vuoto */
+    max-width: 38vh !important; 
+    max-height: 38vh !important;
+  }
+}
+
+.full-player-controls-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 380px;
+  flex: 1; 
+  margin-bottom: 20px; 
+  flex-shrink: 0;
+}
+
+@media (max-height: 700px) {
+  .full-player-controls-wrapper {
+    flex: 1.2; /* Prende lo spazio rimanente in basso in modo proporzionato */
+    margin-bottom: 5px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* Centra i testi e i tasti nel loro spazio assegnato */
+  }
+}
+
+/* Riduciamo leggermente i margini interni per compattezza */
+.full-info-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px; 
+  flex-shrink: 0;
+}
+
+.title-group {
+  min-width: 0;
+  flex: 1;
+  margin-right: 10px;
+}
+
+.title-group h1 {
+  font-size: 22px; 
+  margin: 0;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title-group p {
+  font-size: 15px;
+  color: rgba(255,255,255,0.7);
+  margin: 4px 0 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.full-progress-section { 
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.full-progress-container {
+  padding: 8px 0; /* Aumenta l'area cliccabile per il seek */
+  cursor: pointer;
+}
+
+.full-progress-bg {
+  height: 4px;
+  background: rgba(255,255,255,0.2);
+  width: 100%;
+  border-radius: 2px;
+  position: relative;
+}
+
+.full-progress-fill {
+  height: 100%;
+  background: white;
+  border-radius: 2px;
+  transition: width 0.1s linear;
+}
+
+.progress-knob {
+  width: 12px;
+  height: 12px;
+  background: white;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: left 0.1s linear;
+}
+
+.full-time-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 6px;
+}
+
+.full-controls-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px; /* Margine ridotto verso il footer */
+  flex-shrink: 0;
+  padding: 0 10px;
+}
+
+/* FIX TASTO TONDO */
+.big-play-pause {
+  width: 64px !important;
+  height: 64px !important;
+  min-width: 64px !important;
+  max-width: 64px !important;
+  min-height: 64px !important;
+  max-height: 64px !important;
+  flex-shrink: 0 !important;
+  background-color: #ffffff !important;
+  border: none !important;
+  outline: none !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer;
+  padding: 0 !important;
+}
+
+/* Colore nero solido forzato al Play/Pause */
+.big-play-pause svg path,
+.big-play-pause svg rect,
+.big-play-pause svg polygon {
+  fill: #121212 !important;
+  stroke: #121212 !important;
+  stroke-width: 0px !important;
+}
+
+.full-player-footer {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: rgba(255,255,255,0.7);
+  flex-shrink: 0;
+  margin: 0; /* Reset margini */
+  padding-bottom: clamp(0px, 4vh, 40px);
+}
+
+.footer-right-icons {
+  display: flex;
+  gap: 24px;
+}
+
+@media (max-height: 700px) {
+  .title-group h1 { font-size: 18px !important; }
+  .title-group p { font-size: 14px !important; }
+  
+  /* Riduciamo lo spazio tra titolo e barra di progresso */
+  .full-info-section {
+    margin-bottom: 10px !important;
+  }
+
+  /* Riduciamo lo spazio tra barra di progresso e pulsanti */
+  .full-progress-section {
+    margin-bottom: 10px !important;
+  }
+
+  .big-play-pause { 
+    width: 54px !important; 
+    height: 54px !important; 
+    min-width: 54px !important; 
+    min-height: 54px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Distribuiamo meglio i pulsanti orizzontalmente per non farli sembrare ammucchiati */
+  .full-controls-main { 
+    margin-bottom: 5px !important;
+    padding: 0 5px !important; 
+  }
+  
+  .full-player-footer {
+    padding-bottom: 5px !important;
+  }
+}
+
+.active-green { color: #1ed760 !important; }

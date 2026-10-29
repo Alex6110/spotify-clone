@@ -1,0 +1,43 @@
+.album-detail-page { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+
+.album-header { display: flex; align-items: flex-end; gap: 24px; min-width: 0; }
+.album-detail-cover {
+  width: clamp(160px, 22vw, 232px); aspect-ratio: 1; flex: 0 0 auto; object-fit: cover;
+  border-radius: var(--border-radius-cards); box-shadow: 0 12px 40px rgba(0, 0, 0, .5); background: var(--panel-3);
+}
+.album-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.album-info > p:first-child { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-2); }
+.album-info h1 {
+  font-size: clamp(26px, 4.4vw, 52px); line-height: 1.05; letter-spacing: -.02em; font-weight: 800;
+  overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.album-meta { color: var(--text-2); font-size: 14px; }
+.album-meta strong { color: var(--text); }
+
+.album-actions { display: flex; align-items: center; gap: 16px; }
+.album-play-btn {
+  width: 56px; height: 56px; flex: 0 0 56px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--on-accent); transition: transform .12s;
+}
+.album-play-btn:hover { transform: scale(1.06); }
+.album-play-btn:active { transform: scale(.96); }
+
+.songs-list { min-width: 0; }
+.list-header, .song-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px 52px 36px; align-items: center; gap: 8px; padding: 0 12px; }
+.list-header { height: 36px; color: var(--text-2); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.col-time { text-align: right; }
+.songs-list hr { display: none; }
+.song-row { min-height: 52px; border-radius: var(--radius-sm); cursor: pointer; transition: background .12s; }
+.song-row:hover { background: rgba(255, 255, 255, .07); }
+.song-row.active-song .song-name { color: var(--accent); }
+.song-number { color: var(--text-2); font-size: 14px; display: flex; align-items: center; font-variant-numeric: tabular-nums; }
+.song-details { display: flex; flex-direction: column; min-width: 0; }
+
+/* Se lo spazio centrale è stretto (telefono, o desktop con pannelli larghi) la copertina va sopra al titolo */
+@container (max-width: 600px) {
+  .album-header { flex-direction: column; align-items: stretch; gap: 18px; }
+  .album-detail-cover { width: min(72vw, 280px); margin: 4px auto 0; }
+  .album-info h1 { font-size: clamp(24px, 6.5vw, 32px); -webkit-line-clamp: 3; }
+  .list-header, .song-row { padding: 0 4px; grid-template-columns: 28px minmax(0, 1fr) 32px 44px 32px; }
+}

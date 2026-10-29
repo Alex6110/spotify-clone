@@ -1,0 +1,28 @@
+# dipendenze e build
+node_modules
+dist
+dist-ssr
+*.local
+logs
+*.log
+
+# segreti e configurazione locale
+.env
+.env.*
+!.env.example
+
+# dati personali: mai nel repository
+server/data/*
+!server/data/.gitkeep
+server/prisma/*.db
+server/prisma/*.db-journal
+*.db
+*.sqlite
+songs*.json
+albums*.json
+
+# editor / sistema
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
