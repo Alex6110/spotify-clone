@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Search as SearchIcon } from 'lucide-react';
 import { PlayerContext } from '../context/PlayerContext';
-import { api, coverOf, errorMessage, formatDuration } from '../lib/api';
+import { api, coverOf, errorMessage, formatDuration, isPlayable } from '../lib/api';
 import ArtistAvatar from '../components/ui/ArtistAvatar';
 import LikeButton from '../components/ui/LikeButton';
 import { TrackMenuButton } from '../components/ui/TrackMenu';
@@ -64,11 +64,11 @@ const Search = () => {
           <h3>Brani</h3>
           <div className="track-list">
             {results.tracks.map((t) => (
-              <div key={t.id} className={`track-row ${currentSong?.id === t.id ? 'active-song' : ''}`} onClick={() => playSong(t, results.tracks)}>
+              <div key={t.id} className={`track-row ${currentSong?.id === t.id ? 'active-song' : ''} ${isPlayable(t) ? '' : 'is-broken'}`} onClick={() => playSong(t, results.tracks)}>
                 <img src={coverOf(t)} alt="" loading="lazy" />
                 <div className="track-row-text">
                   <span className="song-name">{t.title}</span>
-                  <span className="song-sub">{t.artist} · {t.album}</span>
+                  <span className="song-sub">{isPlayable(t) ? `${t.artist} · ${t.album}` : 'File danneggiato o incompleto'}</span>
                 </div>
                 <LikeButton track={t} size={16} />
                 <span className="song-duration">{formatDuration(t.durationMs)}</span>

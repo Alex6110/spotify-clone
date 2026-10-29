@@ -83,6 +83,22 @@ npm run scan -- --no-covers   # salta cover e foto
 3. Esegui il backend con Docker o con `node src/index.js` sotto systemd; Caddy o `tailscale serve` davanti per HTTPS.
 4. Per Postgres: in `schema.prisma` cambia `provider = "postgresql"`, imposta `DATABASE_URL` e lancia `npx prisma migrate dev`.
 
+## Manutenzione della libreria
+
+Dalla cartella `server`:
+
+| Comando | A cosa serve |
+|---|---|
+| `npm run doctor` | Report di salute: file vuoti, durate 0:00, copertine e foto mancanti, album "sconosciuti", doppioni. Scrive anche `data/da-rippare.txt` (file da rippare di nuovo, per cartella). |
+| `npm run doctor -- --fix-durations` | Rilegge i brani con durata 0:00 scandendo tutto il file. |
+| `npm run doctor -- --deep` | Cerca anche gli mp3 tagliati (richiede qualche minuto). |
+| `npm run scan -- --full --prune --no-covers` | Rilegge tutti i tag e ripulisce: le collaborazioni "X Feat. Y" tornano all'artista principale, i file sciolti nella cartella dell'artista prendono l'album dai tag, album e artisti rimasti vuoti vengono rimossi. Playlist e preferiti restano intatti. |
+| `npm run scan` | Scansione normale (solo novità, cerca anche le copertine mancanti dalle cartelle e dai tag). |
+| `npm run artwork -- --dry-run` | Mostra quali copertine mancanti troverebbe online (iTunes), senza scrivere niente. Poi `npm run artwork` per scaricarle. |
+| `npm run artwork -- --artists --dry-run` | Idem per le foto degli artisti (Deezer); poi senza `--dry-run`. |
+
+I brani con durata 0:00 sono file vuoti o incompleti: l'app li mostra barrati ("File danneggiato o incompleto") e li salta in coda.
+
 ## Caricare e scaricare musica dall'app
 
 **Carica musica** (Libreria → "Carica musica", oppure Impostazioni): scegli file, cartelle (da computer) o trascinali sulla pagina. Per ogni brano il server legge i tag e lo archivia in `MUSIC_DIR/Artista/Album/NN - Titolo.ext`:

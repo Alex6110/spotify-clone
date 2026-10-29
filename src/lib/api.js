@@ -53,6 +53,10 @@ export function downloadUrl(kind, id) {
   return `${BASE}/api/download/${kind}/${id}?t=${encodeURIComponent(token)}`;
 }
 
+/** Un brano con durata 0 è un file vuoto o incompleto (vedi "npm run doctor"): non si può riprodurre. */
+export const isPlayable = (track) => !!track && Number(track.durationMs) > 0;
+export const notify = (message, kind = 'ok') => window.dispatchEvent(new CustomEvent('app:toast', { detail: { message, kind } }));
+
 export const errorMessage = (err, fallback = 'Qualcosa è andato storto') =>
   err?.response?.data?.error || (err?.request && !err?.response ? 'Server non raggiungibile' : fallback);
 

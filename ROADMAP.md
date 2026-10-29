@@ -19,7 +19,15 @@ Aggiornata il 29/10/2026. Cosa c'è, cosa manca, in che ordine lo facciamo.
 - PWA installabile su iPhone, ascolto offline di brani/album/playlist scaricati, pagina "Scaricati".
 - Carica musica dall'app (archiviazione automatica per artista e album, artista creato se nuovo), download ZIP di album e playlist, download del singolo file.
 
-## 2. Problemi aperti (priorità alta)
+## 2. Stato della libreria (report del 29/10/2026)
+
+40.612 brani (mp3 40.331, flac 281), 2.730 album, 692 artisti, 345 GB. Problemi trovati e cosa è stato fatto:
+- **610 mp3 vuoti o incompleti (0-3 KB)**: sono rovinati sul disco, il software non può recuperarli. L'app li segna e li salta; l'elenco per cartella è in `data/da-rippare.txt`, da rippare di nuovo.
+- **249 album senza copertina** (non c'è immagine né nelle cartelle né nei tag): recupero online con `npm run artwork`.
+- **84 album "sconosciuti"** (file sciolti nella cartella dell'artista) e **collaborazioni "Feat." trattate come artisti separati**: risolti dalla nuova scansione `--full --prune`.
+- Foto artista: nessuna (l'archivio vecchio è stato rimosso, perché sbagliato): recupero online con `npm run artwork -- --artists`.
+
+## 3. Problemi aperti (priorità alta)
 
 | Problema | Causa probabile | Come lo risolviamo |
 |---|---|---|
@@ -29,7 +37,7 @@ Aggiornata il 29/10/2026. Cosa c'è, cosa manca, in che ordine lo facciamo.
 | Copertine mancanti o diverse da pagina a pagina | album senza immagine né nei file né nelle cartelle; copertine duplicate tra artisti | il report le elenca; recupero online (fase 3) |
 | App spostata in alto su iPhone | margini della barra di stato / altezza dello schermo nell'app installata | correzione in `global.css` + pagina "Diagnostica schermo" per misurare cosa vede davvero il telefono |
 
-## 3. Cosa resta da fare, in ordine
+## 4. Cosa resta da fare, in ordine
 
 **Fase 3: libreria pulita e affidabile** (subito)
 1. Report `doctor` e correzioni di durata (fatto, da eseguire).
@@ -57,7 +65,7 @@ Aggiornata il 29/10/2026. Cosa c'è, cosa manca, in che ordine lo facciamo.
 
 Stima: fasi 3-5 sono una decina di passi come quelli già fatti; la fase 6 sono 2-3 passi, ma dipende da quando compri l'hardware.
 
-## 4. Il server: quando e cosa
+## 5. Il server: quando e cosa
 
 **Ora**: il tuo Mac con l'SSD fa da server. Va benissimo per sviluppare, ma l'app funziona solo finché il Mac è acceso e sveglio, e fuori casa serve Tailscale.
 
@@ -72,13 +80,13 @@ Stima: fasi 3-5 sono una decina di passi come quelli già fatti; la fase 6 sono 
 
 **Cloud totalmente gratuito**: non è adatto a tenere la musica.
 - Oracle Cloud "Always Free": 4 core Arm e 24 GB di RAM, ma solo 200 GB di disco in totale e 20 GB di archiviazione oggetti; inoltre le macchine poco usate (sotto il 20% di CPU, rete e memoria per 7 giorni) possono essere recuperate da Oracle.
-- La tua libreria è di 34.000 brani: quasi certamente supera i 200 GB (lo dice `npm run doctor`).
+- La tua libreria è di 345 GB (40.612 brani): supera di molto i 200 GB gratuiti.
 - Quindi la musica deve stare su un tuo disco. Il cloud gratuito può servire a: copia del database (è piccolo) e accesso da fuori casa.
 - Accesso da fuori casa gratis: Tailscale (piano personale gratuito, fino a 6 utenti secondo il loro sito; per far entrare amici senza app serve Funnel, da verificare nel piano).
 
 **Migrazione, in pratica** (2-3 passi): installare Docker sul mini PC, copiare cartella `server/data` e database, cambiare `DATABASE_URL`/`MUSIC_DIR`, `tailscale serve`, rifare il login sul telefono. Il frontend non cambia.
 
-## 5. Come funziona l'offline
+## 6. Come funziona l'offline
 
 - **L'app si apre senza rete**: dopo la prima apertura online, l'app salva se stessa. Si carica anche in modo aereo.
 - **Funziona offline**: la pagina "Scaricati", la riproduzione dei brani scaricati (con scorrimento), le pagine già visitate (con l'ultima copia salvata), le copertine già viste.

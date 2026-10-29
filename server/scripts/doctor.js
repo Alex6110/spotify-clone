@@ -117,6 +117,21 @@ async function main() {
   out(tiny.length ? `${tiny.length} file sotto i 100 KB: quasi certamente vuoti o tagliati.` : 'Nessuno.');
   list(tiny, (t) => `${t.relPath} (${Math.round(t.size / 1024)} KB)`);
 
+  // Elenco per album dei file da recuperare: da rippare di nuovo o ricopiare dall'originale
+  {
+    const bad = tracks.filter((t) => !missingIds.has(t.id) && (!t.durationMs || t.size < 100 * 1024));
+    if (bad.length) {
+      const byDir = new Map();
+      bad.forEach((t) => { const d = path.dirname(t.relPath); if (!byDir.has(d)) byDir.set(d, []); byDir.get(d).push(path.basename(t.relPath)); });
+      const text = [`File vuoti o incompleti da rippare di nuovo o ricopiare: ${bad.length} brani in ${byDir.size} cartelle`, '']
+        .concat([...byDir.entries()].sort().flatMap(([d, names]) => [d, ...names.sort().map((n) => `    ${n}`), '']));
+      fs.mkdirSync(config.dataDir, { recursive: true });
+      const listPath = path.join(config.dataDir, 'da-rippare.txt');
+      fs.writeFileSync(listPath, `${text.join('\n')}\n`);
+      out(`  Elenco completo per cartella: ${listPath} (${bad.length} brani in ${byDir.size} cartelle)`);
+    }
+  }
+
   if (DEEP) {
     section('3b. Durata dichiarata vs durata reale (solo mp3)');
     const mp3 = tracks.filter((t) => t.format === 'mp3' && !missingIds.has(t.id));

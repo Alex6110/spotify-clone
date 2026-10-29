@@ -5,9 +5,38 @@ import '../styles/Home.css';
 
 // Pagina tecnica: misura lo schermo come lo vede l'app. Serve a capire problemi di layout su iPhone
 // (app spostata in alto, vuoto in fondo...) mandando uno screenshot o il testo copiato.
+// Disegna bordi e fasce colorate a schermo intero: dallo screenshot si vede quale altezza viene davvero disegnata.
+const FillProbe = ({ onClose }) => {
+  const box = { position: 'fixed', left: 0, right: 0, zIndex: 9999, boxSizing: 'border-box' };
+  const tag = (bg, text, pos) => (
+    <div style={{ position: 'absolute', left: 0, right: 0, height: 34, background: bg, color: '#000', font: '700 13px/34px system-ui', textAlign: 'center', ...pos }}>{text}</div>
+  );
+  return (
+    <div onClick={onClose}>
+      <div style={{ ...box, top: 0, bottom: 0, border: '3px solid #ff3b30' }}>
+        {tag('#ff3b30', 'ROSSO: inizio (top 0)', { top: 0 })}
+        {tag('#ff3b30', 'ROSSO: fine di "inset 0" / 100dvh', { bottom: 0 })}
+      </div>
+      <div style={{ ...box, top: 0, height: '100vh', border: '3px solid #34c759', pointerEvents: 'none' }}>
+        {tag('#34c759', 'VERDE: fine di 100vh', { bottom: 40 })}
+      </div>
+      <div style={{ ...box, top: 0, height: '100lvh', border: '3px dashed #0a84ff', pointerEvents: 'none' }}>
+        {tag('#0a84ff', 'BLU: fine di 100lvh', { bottom: 80 })}
+      </div>
+      <div style={{ ...box, top: 'env(safe-area-inset-top, 0px)', bottom: 'env(safe-area-inset-bottom, 0px)', border: '3px solid #ffd60a', pointerEvents: 'none' }}>
+        {tag('#ffd60a', 'GIALLO: area sicura', { top: 40 })}
+      </div>
+      <div style={{ ...box, top: '50%', background: '#000', color: '#fff', font: '600 15px system-ui', padding: 12, textAlign: 'center' }}>
+        Scatta uno screenshot e mandalo. Tocca per chiudere.
+      </div>
+    </div>
+  );
+};
+
 const Diagnostics = () => {
   const probes = useRef(null);
   const [rows, setRows] = useState([]);
+  const [probe, setProbe] = useState(false);
 
   useEffect(() => {
     const measure = () => {
@@ -42,7 +71,11 @@ const Diagnostics = () => {
       <h3>Diagnostica schermo</h3>
       <p className="muted-text">Se qualcosa appare spostato o tagliato, manda uno screenshot di questa pagina.</p>
       <table className="diag-table"><tbody>{rows.map(([k, v]) => <tr key={k}><th>{k}</th><td>{String(v)}</td></tr>)}</tbody></table>
-      <button type="button" className="pill-btn" onClick={copy}><Copy size={16} /> Copia i dati</button>
+      <div className="diag-actions">
+        <button type="button" className="pill-btn" onClick={copy}><Copy size={16} /> Copia i dati</button>
+        <button type="button" className="pill-btn primary" onClick={() => setProbe(true)}>Prova riempimento schermo</button>
+      </div>
+      {probe && <FillProbe onClose={() => setProbe(false)} />}
       <div ref={probes} className="diag-probes" aria-hidden="true">
         <div className="p-vh" style={{ height: '100vh' }} />
         <div className="p-dvh" style={{ height: '100dvh' }} />

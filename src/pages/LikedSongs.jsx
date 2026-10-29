@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { Heart, Play } from 'lucide-react';
 import { PlayerContext } from '../context/PlayerContext';
-import { api, errorMessage } from '../lib/api';
+import { api, errorMessage, isPlayable } from '../lib/api';
 import TrackList from '../components/ui/TrackList';
 import '../styles/AlbumDetail.css';
 
@@ -28,7 +28,7 @@ const LikedSongs = () => {
         </div>
       </div>
       <div className="album-actions">
-        <button type="button" className="album-play-btn" disabled={!data.items.length} onClick={() => playSong(data.items[0], data.items)} aria-label="Riproduci">
+        <button type="button" className="album-play-btn" disabled={!data.items.length} onClick={() => { const first = data.items.find(isPlayable); if (first) playSong(first, data.items); }} aria-label="Riproduci">
           <Play size={24} fill="currentColor" />
         </button>
       </div>

@@ -249,3 +249,9 @@ a.pill-btn { display: inline-flex; align-items: center; gap: 8px; }
 .diag-table th { color: var(--text-2); font-weight: 500; width: 46%; }
 .diag-table td { overflow-wrap: anywhere; }
 .diag-probes { position: absolute; left: -9999px; top: 0; width: 1px; visibility: hidden; }
+
+/* Brani con file vuoto o incompleto */
+.is-broken { opacity: .45; }
+.is-broken .song-name { text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, .35); }
+.diag-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.diag-actions .pill-btn { display: inline-flex; align-items: center; gap: 8px; }

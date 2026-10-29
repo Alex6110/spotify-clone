@@ -1,6 +1,6 @@
 import React, { createContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { io } from 'socket.io-client';
-import { api, apiBase, readAuth, streamUrl, coverOf } from '../lib/api';
+import { isPlayable, notify, api, apiBase, readAuth, streamUrl, coverOf } from '../lib/api';
 import { useAuth } from './AuthContext';
 
 export const PlayerContext = createContext();
@@ -102,8 +102,10 @@ export const PlayerProvider = ({ children }) => {
   }, [emit]);
 
   /** Click su un brano: se è già quello corrente fa play/pausa, altrimenti lo avvia (con eventuale nuova coda). */
-  const playSong = useCallback((song, songList = []) => {
+  const playSong = useCallback((song, songListIn = []) => {
     const s = stateRef.current;
+    if (!isPlayable(song)) { notify('Brano non riproducibile: il file è vuoto o incompleto', 'error'); return; }
+    const songList = songListIn.filter(isPlayable); // i brani rovinati restano nella lista ma non entrano in coda
     if (songList.length > 0) {
       setQueue(songList);
       setOriginalQueue(songList);
@@ -121,8 +123,10 @@ export const PlayerProvider = ({ children }) => {
     const { queue: q, currentSong: cur, repeatMode: rep } = stateRef.current;
     if (!cur || q.length === 0) return;
     const idx = q.findIndex((s) => s.id === cur.id);
-    let n = idx + 1;
-    if (n >= q.length) n = rep === 1 ? 0 : -1;
+    // primo brano riproducibile dopo quello corrente (con "ripeti tutto" si riparte dall'inizio)
+    let n = -1;
+    for (let i = idx + 1; i < q.length; i++) { if (isPlayable(q[i])) { n = i; break; } }
+    if (n === -1 && rep === 1) n = q.findIndex(isPlayable);
     if (n === -1) {
       audioRef.current.pause();
       setIsPlaying(false);
@@ -145,7 +149,10 @@ export const PlayerProvider = ({ children }) => {
     // Come in Spotify: dopo i primi secondi "indietro" riparte dall'inizio del brano
     if (audioRef.current.currentTime > 3) { seekTo(0); return; }
     const idx = q.findIndex((s) => s.id === cur.id);
-    startTrack(q[idx - 1 < 0 ? q.length - 1 : idx - 1]);
+    for (let step = 1; step <= q.length; step++) {
+      const cand = q[(idx - step + q.length * 2) % q.length];
+      if (isPlayable(cand)) { startTrack(cand); return; }
+    }
   }, [seekTo, startTrack]);
 
   // ---------- Fine brano ----------

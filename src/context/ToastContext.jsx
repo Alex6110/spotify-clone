@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, TriangleAlert } from 'lucide-react';
 
@@ -14,6 +14,13 @@ export const ToastProvider = ({ children }) => {
     setItems((prev) => [...prev.slice(-2), { id, message, kind }]);
     setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), 2800);
   }, []);
+
+  // anche il codice fuori da React (es. il player) può mostrare un avviso con notify() di lib/api.js
+  useEffect(() => {
+    const onToast = (e) => toast(e.detail?.message || '', e.detail?.kind);
+    window.addEventListener('app:toast', onToast);
+    return () => window.removeEventListener('app:toast', onToast);
+  }, [toast]);
 
   const value = useMemo(() => ({ toast }), [toast]);
 

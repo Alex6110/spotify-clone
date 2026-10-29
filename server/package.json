@@ -9,6 +9,7 @@
     "dev": "node --watch src/index.js",
     "scan": "node scripts/scan.js",
     "doctor": "node scripts/doctor.js",
+    "artwork": "node scripts/artwork.js",
     "smoke": "node scripts/smoke.js",
     "test": "node --test test/*.test.js",
     "db:push": "prisma db push",

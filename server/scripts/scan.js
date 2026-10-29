@@ -103,10 +103,20 @@ async function main() {
 
   const existing = new Map((await prisma.track.findMany({ select: { id: true, relPath: true, size: true, mtimeMs: true, albumId: true } })).map((t) => [t.relPath, t]));
 
+  // File sciolti nella cartella dell'artista (senza sottocartella d'album): l'album si ricava dai tag
+  const loose = audio.filter((f) => T.parseRelPath(f.rel).albumMissing);
+  if (loose.length) {
+    console.log(`[scan] ${loose.length} file senza cartella d'album: leggo i tag per trovare il loro album...`);
+    await mapLimit(loose, CONCURRENCY, async (f) => {
+      try { f.tagAlbum = T.cleanSpaces((await mm.parseFile(f.abs, { skipCovers: true })).common.album || ''); } catch { f.tagAlbum = ''; }
+    });
+  }
+
   // Raggruppa per album usando la struttura delle cartelle (robusto anche se i tag sono incoerenti)
   const groups = new Map();
   for (const f of audio) {
     const info = T.parseRelPath(f.rel);
+    if (info.albumMissing) info.album = T.stripArtistPrefix(f.tagAlbum || 'Singoli', info.artist);
     const key = `${T.normKey(info.artist)}\u0000${T.normKey(info.album)}`;
     if (!groups.has(key)) groups.set(key, { artist: info.artist, album: info.album, files: [] });
     groups.get(key).files.push({ ...f, info });
@@ -129,7 +139,7 @@ async function main() {
     done += group.files.length;
     const changed = group.files.filter((f) => {
       const old = existing.get(f.rel);
-      return FULL || !old || old.size !== f.size || old.mtimeMs !== f.mtimeMs;
+      return FULL || f.info.albumMissing || !old || old.size !== f.size || old.mtimeMs !== f.mtimeMs;
     });
     stats.tracksSkipped += group.files.length - changed.length;
 
@@ -172,7 +182,8 @@ async function main() {
       const fromName = T.parseTrackFile(f.info.fileName);
       const title = T.cleanSpaces(c?.title) || fromName.title;
       const tagArtist = T.cleanSpaces(c?.artist || '');
-      const trackArtistId = tagArtist && T.normKey(tagArtist) !== T.normKey(albumArtistName) ? await artistId(tagArtist) : aId;
+      // "Zucchero Feat. Eric Clapton" resta di Zucchero; un artista davvero diverso (compilation) ha il suo
+      const trackArtistId = tagArtist && !T.sameArtistFamily(tagArtist, albumArtistName) ? await artistId(tagArtist) : aId;
       const data = {
         title,
         titleKey: T.normKey(title),
@@ -254,10 +265,14 @@ async function main() {
       for (let i = 0; i < missing.length; i += 500) {
         await prisma.track.deleteMany({ where: { relPath: { in: missing.slice(i, i + 500) } } });
       }
-      const emptyAlbums = await prisma.album.deleteMany({ where: { tracks: { none: {} } } });
-      const emptyArtists = await prisma.artist.deleteMany({ where: { tracks: { none: {} }, albums: { none: {} } } });
-      console.log(`[scan] Rimossi ${missing.length} brani, ${emptyAlbums.count} album vuoti, ${emptyArtists.count} artisti vuoti.`);
+      console.log(`[scan] Rimossi ${missing.length} brani non più su disco.`);
     }
+  }
+  if (PRUNE) {
+    // album e artisti rimasti senza brani (es. "Album sconosciuto" svuotato, o "Zucchero Feat. ..." non più usato)
+    const emptyAlbums = await prisma.album.deleteMany({ where: { tracks: { none: {} } } });
+    const emptyArtists = await prisma.artist.deleteMany({ where: { tracks: { none: {} }, albums: { none: {} } } });
+    console.log(`[scan] Ripulito: ${emptyAlbums.count} album vuoti, ${emptyArtists.count} artisti vuoti.`);
   }
 
   const totals = { artisti: await prisma.artist.count({ where: { albums: { some: {} } } }), album: await prisma.album.count(), brani: await prisma.track.count() };

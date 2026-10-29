@@ -25,7 +25,7 @@ test('parseTrackFile riconosce numero di traccia e disco', () => {
 
 test('parseRelPath gestisce le strutture della libreria', () => {
   assert.deepEqual(t.parseRelPath("10,000 Maniacs/10,000 Maniacs - Candy Everybody Wants/03 - Trouble Me (Live).mp3"),
-    { artist: '10,000 Maniacs', album: 'Candy Everybody Wants', discNo: null, fileName: '03 - Trouble Me (Live).mp3' });
+    { artist: '10,000 Maniacs', album: 'Candy Everybody Wants', discNo: null, albumMissing: false, fileName: '03 - Trouble Me (Live).mp3' });
   assert.equal(t.parseRelPath('Pink Floyd/The Wall/CD2/01 - x.mp3').discNo, 2);
   assert.equal(t.parseRelPath('Pink Floyd/The Wall/CD2/01 - x.mp3').album, 'The Wall');
   const single = t.parseRelPath('Queen - Queen II/01 - Procession.mp3');
@@ -100,4 +100,20 @@ test('planDestination usa le cartelle esistenti e ne crea di nuove', async () =>
 
   const nothing = await planDestination({ tags: {}, fileName: 'a.mp3', ext: 'mp3', db });
   assert.equal(nothing.dir, 'Artista sconosciuto/Album sconosciuto');
+});
+
+test('albumMissing: file sciolti nella cartella dell\'artista', () => {
+  assert.equal(t.parseRelPath('Highsnob/01 - x.mp3').albumMissing, true);
+  assert.equal(t.parseRelPath('Highsnob/Album/01 - x.mp3').albumMissing, false);
+  assert.equal(t.parseRelPath('Queen - Queen II/01 - x.mp3').albumMissing, false);
+});
+
+test('sameArtistFamily riconosce le collaborazioni ma non nomi diversi', () => {
+  assert.equal(t.sameArtistFamily('Zucchero Feat. Eric Clapton', 'Zucchero'), true);
+  assert.equal(t.sameArtistFamily('Zucchero', 'Zucchero & John Lee Hooker'), true);
+  assert.equal(t.sameArtistFamily('Santana Feat. Maná', 'Santana'), true);
+  assert.equal(t.sameArtistFamily('Alice', 'Alice in Chains'), true); // limite noto: succede solo se stanno nello stesso album
+  assert.equal(t.sameArtistFamily('Queen', 'Queensrÿche'), false);
+  assert.equal(t.sameArtistFamily('Al', 'Alice Cooper'), false);
+  assert.equal(t.sameArtistFamily('Pink Floyd', 'Roger Waters'), false);
 });

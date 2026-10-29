@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Play, Pause, HardDriveDownload } from 'lucide-react';
 import { PlayerContext } from '../context/PlayerContext';
-import { api, coverOf, downloadUrl, errorMessage, formatDuration } from '../lib/api';
+import { api, coverOf, downloadUrl, errorMessage, formatDuration, isPlayable } from '../lib/api';
 import LikeButton from '../components/ui/LikeButton';
 import Equalizer from '../components/ui/Equalizer';
 import DownloadButton from '../components/ui/DownloadButton';
@@ -27,7 +27,7 @@ function AlbumDetail() {
   const totalMs = album.tracks.reduce((sum, t) => sum + (t.durationMs || 0), 0);
   const albumPlaying = album.tracks.some((t) => t.id === currentSong?.id) && isPlaying;
   const playAlbum = () => {
-    const first = album.tracks.find((t) => t.id === currentSong?.id) || album.tracks[0];
+    const first = album.tracks.find((t) => t.id === currentSong?.id) || album.tracks.find(isPlayable);
     if (first) playSong(first, album.tracks);
   };
 
@@ -67,13 +67,14 @@ function AlbumDetail() {
           return (
             <div
               key={song.id}
-              className={`song-row ${isCurrent ? 'active-song' : ''}`}
+              className={`song-row ${isCurrent ? 'active-song' : ''} ${isPlayable(song) ? '' : 'is-broken'}`}
               onClick={() => playSong(song, album.tracks)}
             >
               <span className="song-number">{isCurrent ? <Equalizer playing={isPlaying} /> : (song.trackNo ?? index + 1)}</span>
               <div className="song-details">
                 <span className="song-name">{song.title}</span>
-                {song.artist !== album.artist && <span className="song-sub">{song.artist}</span>}
+                {!isPlayable(song) ? <span className="song-sub">File danneggiato o incompleto</span>
+                  : song.artist !== album.artist && <span className="song-sub">{song.artist}</span>}
               </div>
               <LikeButton track={song} size={16} />
               <span className="song-duration">{formatDuration(song.durationMs)}</span>

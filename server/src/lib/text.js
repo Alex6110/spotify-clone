@@ -57,6 +57,7 @@ function parseRelPath(relPath) {
   let artist = null;
   let album = null;
   let discNo = null;
+  let albumMissing = false;
   if (dirs.length >= 2) {
     artist = dirs[0];
     album = dirs[1];
@@ -68,11 +69,14 @@ function parseRelPath(relPath) {
       album = dirs[0].slice(i + 3);
     } else {
       artist = dirs[0];
+      albumMissing = true; // file direttamente nella cartella dell'artista: l'album si legge dai tag
     }
+  } else {
+    albumMissing = true;
   }
   artist = cleanSpaces(artist) || 'Artista sconosciuto';
   album = stripArtistPrefix(album || 'Album sconosciuto', artist);
-  return { artist, album, discNo, fileName: parts[parts.length - 1] };
+  return { artist, album, discNo, albumMissing, fileName: parts[parts.length - 1] };
 }
 
 /** Risolve un percorso relativo dentro una radice impedendo di uscirne (path traversal). */
@@ -119,7 +123,22 @@ function trackFileName({ title, trackNo, discNo, ext }) {
   return `${base}.${String(ext || '').replace(/^\./, '').toLowerCase()}`;
 }
 
+/**
+ * "Zucchero Feat. Eric Clapton", "Al Bano & Romina Power", "Zucchero" sono la stessa famiglia: il nome più corto
+ * compare come parola intera dentro quello più lungo. Serve a non creare un artista nuovo per ogni collaborazione.
+ */
+function sameArtistFamily(a, b) {
+  const ka = normKey(a);
+  const kb = normKey(b);
+  if (!ka || !kb) return false;
+  if (ka === kb) return true;
+  const [short, long] = ka.length <= kb.length ? [ka, kb] : [kb, ka];
+  if (short.length < 3) return false;
+  return long.startsWith(`${short} `) || long.endsWith(` ${short}`) || long.includes(` ${short} `);
+}
+
 module.exports = {
+  sameArtistFamily,
   safeFileName, trackFileName,
   legacySlug,
   normKey, cleanSpaces, stripArtistPrefix, discFromFolder, parseTrackFile,

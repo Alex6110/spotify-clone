@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Play, Pause, Pencil, Trash2, Check, X, HardDriveDownload } from 'lucide-react';
 import { PlayerContext } from '../context/PlayerContext';
 import { useToast } from '../context/ToastContext';
-import { api, downloadUrl, errorMessage, formatDuration } from '../lib/api';
+import { api, downloadUrl, errorMessage, formatDuration, isPlayable } from '../lib/api';
 import { deletePlaylist, removeFromPlaylist, renamePlaylist } from '../lib/playlists';
 import PlaylistCover from '../components/ui/PlaylistCover';
 import DownloadButton from '../components/ui/DownloadButton';
@@ -35,7 +35,7 @@ const PlaylistDetail = () => {
   const playing = tracks.some((t) => t.id === currentSong?.id) && isPlaying;
 
   const play = () => {
-    const first = tracks.find((t) => t.id === currentSong?.id) || tracks[0];
+    const first = tracks.find((t) => t.id === currentSong?.id) || tracks.find(isPlayable);
     if (first) playSong(first, tracks);
   };
 
