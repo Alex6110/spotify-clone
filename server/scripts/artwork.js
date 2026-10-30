@@ -92,6 +92,40 @@ async function findAlbumCover(artist, title) {
   return best;
 }
 
+/** Somiglianza per parole (0..1): tollera titoli tagliati, "Vol.", sottotitoli, apostrofi. */
+function tokens(title) {
+  return new Set(cleanAlbum(title).split(/\s+/).filter((w) => w.length > 1 && !['the', 'of', 'and', 'live', 'best', 'vol', 'volume'].includes(w)));
+}
+function similarity(a, b) {
+  const A = tokens(a), B = tokens(b);
+  if (!A.size || !B.size) return 0;
+  let common = 0;
+  for (const w of A) if (B.has(w)) common += 1;
+  return common / Math.min(A.size, B.size);
+}
+
+/** Seconda fonte: Deezer (nessun limite stretto). Accetta se l'artista coincide e le parole del titolo combaciano. */
+async function findAlbumCoverDeezer(artist, title) {
+  const clean = String(title).replace(/_/g, ' ').replace(/[\[(][^\])]*[\])]/g, ' ').replace(/\s+/g, ' ').trim();
+  const queries = [`${artist} ${clean}`, clean];
+  let best = null;
+  for (const q of queries) {
+    const data = await getJson(`https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=15`);
+    for (const r of data?.data || []) {
+      const img = r.cover_xl || r.cover_big;
+      if (!img || !r.title) continue;
+      const an = r.artist?.name || '';
+      if (!T.sameArtistFamily(an, artist) && T.normKey(an) !== 'various artists') continue;
+      const sim = similarity(title, r.title);
+      const score = albumMatches(title, r.title) ? 2 : sim >= 0.6 ? 1 : 0;
+      if (score && (!best || score > best.score || (score === best.score && sim > best.sim))) best = { score, sim, name: r.title, artist: an, img };
+    }
+    if (best && best.score === 2) break;
+    await sleep(400);
+  }
+  return best;
+}
+
 async function findArtistPhoto(name) {
   const data = await getJson(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=8`);
   const exact = (data?.data || []).filter((a) => a.picture_xl && !/artist\/\/?(0|1000x1000-000000)/.test(a.picture_xl) && T.normKey(a.name) === T.normKey(name));
@@ -112,7 +146,8 @@ async function main() {
     for (const a of albums) {
       if (n++ >= LIMIT) break;
       if (/sconosciut/i.test(a.artist.name) || /sconosciut/i.test(a.title)) { notFound.push(`${a.artist.name} - ${a.title} (nome non valido)`); continue; }
-      const hit = await findAlbumCover(a.artist.name, a.title);
+      let hit = await findAlbumCover(a.artist.name, a.title);
+      if (!hit) hit = await findAlbumCoverDeezer(a.artist.name, a.title);
       if (!hit) { notFound.push(`${a.artist.name} - ${a.title}`); console.log(`  --  ${a.artist.name} - ${a.title}`); await sleep(3200); continue; }
       console.log(`  OK  ${a.artist.name} - ${a.title}  ->  ${hit.artist} - ${hit.name}${hit.score === 1 ? ' (titolo parziale)' : ''}`);
       if (!DRY) {

@@ -37,6 +37,14 @@
 html, body, #root { height: 100%; }
 html { background: var(--bg); }
 
+/* iOS 26 (bug WebKit 301108): nell'app installata con viewport-fit=cover + black-translucent
+   la finestra risulta più bassa dello schermo (qui 812 su 874 pt) e il fondo resta nero.
+   Se la pagina è almeno alta quanto lo schermo, iOS dà il viewport completo.
+   Il min() evita lo scroll dove l'inset superiore è 0. */
+@media (display-mode: standalone) {
+  html { min-height: min(100lvh, calc(100% + env(safe-area-inset-top, 0px))); }
+}
+
 body {
   margin: 0;
   background: var(--bg);
