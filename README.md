@@ -140,3 +140,20 @@ Note:
 3. Caricamento e download dall'app
 4. Mix automatici e consigli dagli ascolti
 5. Richieste di brani/album all'amministratore
+
+## Controllo libreria (strumento a parte)
+
+Pagina locale, separata dall'app, per controllare con gli occhi tutto l'archivio: foto artisti, copertine, album mancanti, durate.
+
+```bash
+cd server
+npm run curator        # poi apri http://localhost:5055
+```
+
+Serve Node 22.13 o più recente (usa il SQLite integrato) e internet (usa Deezer, gratuito e senza chiave).
+
+1. **Sincronizzazione**: scarica le discografie di tutti gli artisti (20-40 minuti, si può fermare e riprendere).
+2. **Artisti**: per ognuno scegli l'artista Deezer giusto (foto e riferimento), confronta gli album, correggi copertine, segna come controllato.
+3. **Mancanti**: album della discografia ufficiale che non hai. **Brani a 00:00**: file vuoti da ricopiare. **Durate diverse**: brani più corti/lunghi del riferimento. **Copertine**: la tua accanto a quella ufficiale.
+
+Prima di ogni modifica crea una copia del database in `server/data/app-prima-del-curator-*.db`. Le tue scelte sono in `server/data/curator-state.json` e la cache in `curator-cache.json` (non vanno su GitHub). Le correzioni di foto e copertine valgono subito nell'app; chiudi e riapri l'app per vederle.
