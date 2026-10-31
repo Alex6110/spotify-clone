@@ -18,6 +18,12 @@ const FULL = args.has('--full');
 const PRUNE = args.has('--prune');
 const FORCE = args.has('--force');
 const NO_COVERS = args.has('--no-covers');
+// Copertine scelte a mano nello strumento di controllo (npm run curator): la scansione non deve sostituirle.
+let LOCKED_COVERS = new Set();
+try {
+  const st = JSON.parse(require('fs').readFileSync(require('path').join(config.dataDir, 'curator-state.json'), 'utf8'));
+  LOCKED_COVERS = new Set(Object.entries(st.albums || {}).filter(([, v]) => v && v.coverLocked).map(([k]) => Number(k)));
+} catch { /* nessuna scelta manuale */ }
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const PREFERRED_COVER = ['cover', 'folder', 'front', 'album', 'artwork'];
@@ -206,7 +212,7 @@ async function main() {
     // --- cover e foto artista ---
     if (!NO_COVERS) {
       const coverFile = path.join(config.coversDir, `${album.id}.jpg`);
-      if (!album.cover || !fs.existsSync(coverFile) || changed.length) {
+      if (!album.cover || !fs.existsSync(coverFile) || (changed.length && !LOCKED_COVERS.has(album.id))) {
         let buf = null;
         // cartella dell'album per prima, poi quelle dei singoli brani (es. CD1, CD2)
         const relParts = group.files[0].rel.split('/');

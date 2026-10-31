@@ -24,7 +24,7 @@ function resolvePaths() {
     const rel = url.replace(/^file:/, '');
     dbFile = path.isAbsolute(rel) ? rel : path.resolve(SERVER_DIR, 'prisma', rel); // Prisma risolve rispetto alla cartella prisma/
   }
-  return { dataDir, dbFile, coversDir: path.join(dataDir, 'covers'), photosDir: path.join(dataDir, 'artist-photos') };
+  return { musicDir: env.MUSIC_DIR ? path.resolve(env.MUSIC_DIR) : '', dataDir, dbFile, coversDir: path.join(dataDir, 'covers'), photosDir: path.join(dataDir, 'artist-photos') };
 }
 
 class Store {
@@ -37,6 +37,7 @@ class Store {
     if (!fs.existsSync(this.paths.dbFile)) throw new Error(`Database non trovato: ${this.paths.dbFile}`);
     this.db = new DatabaseSync(this.paths.dbFile);
     this.db.exec('PRAGMA busy_timeout = 8000');
+    this.db.exec('PRAGMA foreign_keys = ON'); // come Prisma: cancellando un brano spariscono anche Mi piace, ascolti e voci di playlist
     this.backedUp = false;
     this.stateFile = path.join(this.paths.dataDir, 'curator-state.json');
     this.state = { artists: {}, albums: {}, ignored: {} };
@@ -77,6 +78,23 @@ class Store {
     this.saveState();
   }
 
+  run(sql, ...args) { return this.db.prepare(sql).run(...args); }
+  tx(fn) {
+    this.db.exec('BEGIN');
+    try { const r = fn(); this.db.exec('COMMIT'); return r; } catch (e) { this.db.exec('ROLLBACK'); throw e; }
+  }
+  track(id) {
+    return this.get(`SELECT t.*, al.artistId AS albumArtistId, al.title AS albumTitle FROM Track t JOIN Album al ON al.id = t.albumId WHERE t.id = ?`, id);
+  }
+  searchTracks(q, preferArtistId) {
+    const like = `%${String(q).replace(/[%_]/g, ' ').trim()}%`;
+    return this.all(`
+      SELECT t.id, t.title, t.durationMs, t.albumId, al.title AS album, ar.id AS artistId, ar.name AS artist
+      FROM Track t JOIN Album al ON al.id = t.albumId JOIN Artist ar ON ar.id = al.artistId
+      WHERE t.title LIKE ? OR ar.name LIKE ? OR al.title LIKE ?
+      ORDER BY (ar.id = ?) DESC, ar.name COLLATE NOCASE, al.title COLLATE NOCASE, t.trackNo LIMIT 40`, like, like, like, preferArtistId || 0);
+  }
+
   // ---- letture ----
   artists() {
     return this.all(`
@@ -114,4 +132,4 @@ class Store {
   setArtistPhoto(artistId, value) { this.backup(); this.db.prepare('UPDATE Artist SET photo = ? WHERE id = ?').run(value, artistId); }
 }
 
-module.exports = { Store, resolvePaths };
+module.exports = { Store, resolvePaths, readEnv };

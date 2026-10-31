@@ -79,3 +79,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .toast.bad{border-color:var(--bad)}
 .note{background:#e9b44c14;border:1px solid #63522a;border-radius:10px;padding:10px 14px;margin:12px 0;color:#e6cf9b}
 @media(max-width:820px){.shell{grid-template-columns:1fr}.side{position:static;height:auto;flex-direction:column}.main{padding:18px 14px 60px}nav{flex-direction:row;flex-wrap:wrap}}
+
+.modal{position:fixed;inset:0;background:#000a;display:flex;align-items:center;justify-content:center;z-index:20;padding:16px}
+.modal-box{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px;width:min(560px,100%);max-height:90vh;overflow:auto}
+.log{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:12px;overflow:auto;max-height:220px;white-space:pre-wrap}

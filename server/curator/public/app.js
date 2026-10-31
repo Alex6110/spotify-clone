@@ -173,6 +173,12 @@ async function pageArtist(id) {
         <button class="btn small" data-ign="${m.id}">Ignora</button></div>`).join('')}</div>`
       : `<div class="empty-state">${r.cached ? 'Non risulta mancare nessun album.' : 'Discografia non disponibile.'}</div>`;
   };
+  function trackActions(trackId, albumId) {
+    const opts = r.albums.filter((x) => x.id !== albumId).map((x) => `<option value="${x.id}">${esc(x.title)}</option>`).join('');
+    return `<td style="white-space:nowrap"><select data-act="move" data-track="${trackId}" style="max-width:150px"><option value="">Sposta in…</option>${opts}<option value="new">Nuovo album…</option></select>
+      <button class="btn small" data-act="feat" data-track="${trackId}">Artista</button>
+      <button class="btn small" data-act="rm" data-track="${trackId}">${ic('x')} Rimuovi</button></td>`;
+  }
   function albumRow(al) {
     const ref = al.ref; const t = al.tracks;
     const badges = [];
@@ -209,29 +215,60 @@ async function pageArtist(id) {
       <button class="btn small ${al.state.confirmed ? 'ok' : ''}" data-act="confirm">${ic('check')} ${al.state.confirmed ? 'Controllato' : 'Segna controllato'}</button>
       <select data-act="link" style="max-width:340px">${opts.join('')}</select></div>`;
     if (t) {
-      h += `<table><thead><tr><th>Nel tuo archivio</th><th class="num">Durata</th><th>Su Deezer</th><th class="num">Durata</th><th class="num">Differenza</th></tr></thead><tbody>
+      h += `<table><thead><tr><th>Nel tuo archivio</th><th class="num">Durata</th><th>Su Deezer</th><th class="num">Durata</th><th class="num">Differenza</th><th></th></tr></thead><tbody>
         ${t.pairs.map((p) => `<tr><td>${esc(p.title)}</td><td class="num ${p.zero ? 'bad-t' : ''}">${p.zero ? '0:00' : dur(p.ms)}</td><td class="dim">${esc(p.refTitle)}</td><td class="num">${mmss(p.refSec)}</td>
-          <td class="num ${p.bad ? 'bad-t' : 'dim'}">${p.diff == null ? '—' : `${p.diff > 0 ? '+' : ''}${p.diff} s`}</td></tr>`).join('')}
-        ${t.extra.map((p) => `<tr><td>${esc(p.title)}</td><td class="num">${dur(p.ms)}</td><td class="warn-t" colspan="3">non presente nell'album di riferimento</td></tr>`).join('')}
-        ${t.missing.map((p) => `<tr><td class="warn-t" colspan="2">mancante</td><td class="dim">${p.disc > 1 ? `${p.disc}-` : ''}${p.no}. ${esc(p.title)}</td><td class="num">${mmss(p.sec)}</td><td></td></tr>`).join('')}
+          <td class="num ${p.bad ? 'bad-t' : 'dim'}">${p.diff == null ? '—' : `${p.diff > 0 ? '+' : ''}${p.diff} s`}</td>${trackActions(p.id, al.id)}</tr>`).join('')}
+        ${t.extra.map((p) => `<tr><td>${esc(p.title)}</td><td class="num">${dur(p.ms)}</td><td class="warn-t" colspan="3">non presente nell'album di riferimento</td>${trackActions(p.id, al.id)}</tr>`).join('')}
+        ${t.missing.map((p) => `<tr><td class="warn-t" colspan="2">mancante</td><td class="dim">${p.disc > 1 ? `${p.disc}-` : ''}${p.no}. ${esc(p.title)}</td><td class="num">${mmss(p.sec)}</td><td></td><td></td></tr>`).join('')}
         </tbody></table>`;
-    } else h += '<p class="dim">Senza album di riferimento non posso confrontare i brani.</p>';
+    } else {
+      h += `<p class="dim">Senza album di riferimento non posso confrontare i brani.</p><table><tbody>${(al.ownTracks || []).map((p) => `<tr><td>${esc(p.title)}</td><td class="num">${dur(p.durationMs)}</td>${trackActions(p.id, al.id)}</tr>`).join('')}</tbody></table>`;
+    }
+    h += `<div class="bar"><input type="search" data-act="tsearch" placeholder="Aggiungi a questo album un brano già presente nell'archivio: cerca titolo o artista…" style="width:min(520px,100%)"></div><div data-tres></div>`;
     return h;
   }
   const bindAlbums = () => {
-    tab.onclick = (e) => {
+    tab.onclick = async (e) => {
       const ign = e.target.closest('[data-ign]');
       if (ign) return busy(ign, async () => { await post('/api/ignore', { artistId: id, refAlbumId: ign.dataset.ign, on: true }); await reload(); });
       const b = e.target.closest('[data-act]'); if (!b || b.tagName === 'SELECT') return;
       const box = b.closest('.album'); const al = r.albums.find((x) => x.id === Number(box.dataset.album));
+      if (b.dataset.act === 'rm') {
+        if (!confirm('Rimuovere il brano dall\'archivio?\nIl file viene spostato nella cartella .cestino (non cancellato) e sparisce dal database, compresi Mi piace e playlist.')) return;
+        return busy(b, async () => { await post(`/api/track/${b.dataset.track}/remove`); toast('Brano rimosso'); await reload(); });
+      }
+      if (b.dataset.act === 'feat') {
+        const name = prompt('Artista di questo brano (per i featuring: scrivi il nome esatto, se non esiste lo creo).\nIl file non viene spostato.');
+        if (!name) return;
+        return busy(b, async () => { await post(`/api/track/${b.dataset.track}/artist`, { name }); toast('Artista del brano aggiornato'); await reload(); });
+      }
+      if (b.dataset.act === 'bring') return busy(b, async () => { await post(`/api/track/${b.dataset.track}/move`, { albumId: al.id }); toast('Brano spostato qui'); await reload(); });
       if (b.dataset.act === 'toggle') {
         const d = $('.detail', box);
-        if (d.hidden) { d.innerHTML = albumDetail(al); d.hidden = false; } else d.hidden = true;
+        if (d.hidden) { if (!al.ref) al.ownTracks = await api(`/api/album/${al.id}/tracks`); d.innerHTML = albumDetail(al); d.hidden = false; } else d.hidden = true;
       } else if (b.dataset.act === 'usecover') busy(b, async () => { await post(`/api/album/${al.id}/cover`, { url: al.ref.cover }); toast('Copertina aggiornata'); await reload(); });
       else if (b.dataset.act === 'upcover') pickFile('image/*', (f) => busy(b, async () => { await api(`/api/album/${al.id}/cover`, { method: 'PUT', body: f }); toast('Copertina aggiornata'); await reload(); }));
       else if (b.dataset.act === 'confirm') busy(b, async () => { await post(`/api/album/${al.id}/state`, { confirmed: !al.state.confirmed }); await reload(); });
     };
+    let searchTimer;
+    tab.oninput = (e) => {
+      const inp = e.target.closest('[data-act=tsearch]'); if (!inp) return;
+      clearTimeout(searchTimer);
+      const box = inp.closest('.album'); const out = $('[data-tres]', box);
+      searchTimer = setTimeout(async () => {
+        if (inp.value.trim().length < 2) { out.innerHTML = ''; return; }
+        const rows = await api(`/api/tracks?q=${encodeURIComponent(inp.value)}&artist=${id}`);
+        out.innerHTML = rows.length ? `<table><tbody>${rows.map((t) => `<tr><td>${esc(t.title)}</td><td class="dim">${esc(t.artist)} — ${esc(t.album)}</td><td class="num">${dur(t.durationMs)}</td><td><button class="btn small" data-act="bring" data-track="${t.id}">Porta qui</button></td></tr>`).join('')}</tbody></table>` : '<p class="dim">Nessun brano trovato.</p>';
+      }, 300);
+    };
     tab.onchange = (e) => {
+      const mv = e.target.closest('select[data-act=move]');
+      if (mv && mv.value) {
+        const al = r.albums.find((x) => x.id === Number(mv.closest('.album').dataset.album));
+        let body;
+        if (mv.value === 'new') { const title = prompt('Titolo del nuovo album (per questo artista):'); if (!title) { mv.value = ''; return; } body = { title, artistId: r.artist.id }; } else body = { albumId: Number(mv.value) };
+        return busy(mv, async () => { await post(`/api/track/${mv.dataset.track}/move`, body); toast('Brano spostato'); await reload(); });
+      }
       const sel = e.target.closest('select[data-act=link]'); if (!sel || sel.value === '') return;
       const al = r.albums.find((x) => x.id === Number(sel.closest('.album').dataset.album));
       busy(sel, async () => { await post(`/api/album/${al.id}/state`, { ref: Number(sel.value) }); await reload(); });
@@ -347,6 +384,9 @@ async function pageSync() {
       <div class="stat"><b>${ov.artists}</b><span>artisti</span></div><div class="stat"><b>${ov.cacheEntries}</b><span>risposte già salvate</span></div>
       <div class="stat"><b>${ov.noPhoto}</b><span>artisti senza foto</span></div><div class="stat"><b>${ov.noCover}</b><span>album senza copertina</span></div></div>
     <div class="card" id="job"></div>
+    <h2>Aggiorna la libreria</h2>
+    <p class="sub">Dopo aver aggiunto o ricopiato file nella cartella della musica, esegui la scansione per portarli nel database.</p>
+    <div class="card" id="scan"></div>
     <p class="dim" style="margin-top:14px">Database: ${esc(ov.db)}<br>Prima di ogni modifica (foto o copertine) viene creata una copia di sicurezza in <code>data/</code>.</p>`;
   const draw = async () => {
     const j = await api('/api/sync');
@@ -362,6 +402,13 @@ async function pageSync() {
     clearTimeout(pollTimer);
     if (j.running && location.hash === '#/sync') pollTimer = setTimeout(draw, 1500);
   };
+  const drawScan = async () => {
+    const j = await api('/api/rescan');
+    $('#scan').innerHTML = `<div class="bar" style="margin-top:0"><button class="btn primary" id="rescan" ${j.running ? 'disabled' : ''}>${j.running ? 'Scansione in corso…' : 'Scansiona la libreria'}</button>${j.code != null && !j.running ? `<span class="badge ${j.code === 0 ? 'ok' : 'bad'}">${j.code === 0 ? 'completata' : 'errore'}</span>` : ''}</div>${j.lines.length ? `<pre class="log">${esc(j.lines.slice(-12).join('\n'))}</pre>` : ''}`;
+    $('#rescan').onclick = async () => { try { await post('/api/rescan'); drawScan(); } catch (e) { toast(e.message, true); } };
+    if (j.running && location.hash === '#/sync') setTimeout(drawScan, 1500);
+  };
+  drawScan();
   const start = async (covers) => { try { await post('/api/sync', { covers }); draw(); } catch (e) { toast(e.message, true); } };
   draw();
 }

@@ -157,3 +157,12 @@ Serve Node 22.13 o più recente (usa il SQLite integrato) e internet (usa Deezer
 3. **Mancanti**: album della discografia ufficiale che non hai. **Brani a 00:00**: file vuoti da ricopiare. **Durate diverse**: brani più corti/lunghi del riferimento. **Copertine**: la tua accanto a quella ufficiale.
 
 Prima di ogni modifica crea una copia del database in `server/data/app-prima-del-curator-*.db`. Le tue scelte sono in `server/data/curator-state.json` e la cache in `curator-cache.json` (non vanno su GitHub). Le correzioni di foto e copertine valgono subito nell'app; chiudi e riapri l'app per vederle.
+
+### Correggere i brani dal controllo libreria
+
+Nel dettaglio di un album (pagina artista → Dettagli) ogni brano ha tre comandi:
+- **Sposta in…**: sposta il file nella cartella di un altro album (anche uno nuovo) e aggiorna il database. L'ID del brano resta lo stesso, quindi Mi piace e playlist non si perdono.
+- **Artista**: cambia l'artista del brano nel database (per i featuring) senza spostare il file.
+- **Rimuovi**: il file va in `MUSIC_DIR/.cestino` (non viene cancellato) e il brano sparisce da database, playlist e Mi piace.
+
+Sotto la tabella puoi cercare un brano già presente nell'archivio e portarlo in quell'album. Per aggiungere un file nuovo copialo nella cartella dell'album (o usa Carica nell'app) e poi premi "Scansiona la libreria" in Sincronizzazione. Ogni operazione è registrata in `server/data/curator-log.txt`.

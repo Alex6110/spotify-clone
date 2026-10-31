@@ -6,10 +6,12 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { Store } = require('./lib/store');
+const { spawn } = require('child_process');
+const { Store, readEnv } = require('./lib/store');
 const { Deezer, downloadImage } = require('./lib/deezer');
 const { Analyzer } = require('./lib/analyze');
 const images = require('./lib/images');
+const files = require('./lib/files');
 
 const PORT = Number(process.env.CURATOR_PORT) || 5055;
 const PUBLIC = path.join(__dirname, 'public');
@@ -18,6 +20,16 @@ let store;
 try { store = new Store(); } catch (e) { console.error(`\n[curator] ${e.message}\n`); process.exit(1); }
 const dz = new Deezer({ base: process.env.DEEZER_BASE || 'https://api.deezer.com', cacheFile: path.join(store.paths.dataDir, 'curator-cache.json') });
 const an = new Analyzer(store, dz);
+
+// scansione delle cartelle (aggiorna il database dopo che hai aggiunto/spostato file)
+const scan = { running: false, lines: [], code: null };
+function runScan() {
+  Object.assign(scan, { running: true, lines: [], code: null });
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'scripts', 'scan.js')], { cwd: path.join(__dirname, '..'), env: process.env });
+  const feed = (d) => { for (const l of String(d).split(/\r?\n/)) if (l.trim()) scan.lines.push(l); scan.lines = scan.lines.slice(-40); };
+  child.stdout.on('data', feed); child.stderr.on('data', feed);
+  child.on('close', (c) => { scan.running = false; scan.code = c; summaryCache = null; });
+}
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.svg': 'image/svg+xml' };
 
@@ -79,6 +91,7 @@ async function applyAlbumCover(albumId, buf) {
   await images.saveJpeg(buf, path.join(store.paths.coversDir, `${albumId}.jpg`));
   const value = `/covers/${albumId}.jpg?v=${Date.now().toString(36)}`;
   store.setAlbumCover(albumId, value);
+  store.patchAlbum(albumId, { coverLocked: true }); // la scansione non la sostituirà
   summaryCache = null;
   return value;
 }
@@ -160,6 +173,31 @@ async function route(req, res) {
     store.setIgnored(Number(b.artistId), String(b.refAlbumId), !!b.on); summaryCache = null;
     return send(res, 200, { ok: true });
   }
+
+  if (req.method === 'GET' && (x = m(/^\/api\/album\/(\d+)\/tracks$/))) return send(res, 200, store.tracksOfAlbum(Number(x[1])));
+
+  // modifica dei brani (file sul disco + database)
+  if (req.method === 'GET' && p === '/api/tracks') {
+    const q = (url.searchParams.get('q') || '').trim();
+    return send(res, 200, q.length >= 2 ? store.searchTracks(q, Number(url.searchParams.get('artist'))) : []);
+  }
+  if (req.method === 'POST' && (x = m(/^\/api\/track\/(\d+)\/move$/))) {
+    const b = await readJson(req);
+    const r = files.moveTrack(store, Number(x[1]), b.albumId ? { albumId: Number(b.albumId) } : { title: b.title, artistId: b.artistId });
+    summaryCache = null;
+    return send(res, 200, r);
+  }
+  if (req.method === 'POST' && (x = m(/^\/api\/track\/(\d+)\/remove$/))) {
+    const r = files.removeTrack(store, Number(x[1])); summaryCache = null;
+    return send(res, 200, r);
+  }
+  if (req.method === 'POST' && (x = m(/^\/api\/track\/(\d+)\/artist$/))) {
+    const b = await readJson(req);
+    return send(res, 200, files.setTrackArtist(store, Number(x[1]), b.name));
+  }
+
+  if (req.method === 'GET' && p === '/api/rescan') return send(res, 200, scan);
+  if (req.method === 'POST' && p === '/api/rescan') { if (scan.running) return send(res, 409, { error: 'Scansione già in corso' }); runScan(); return send(res, 202, { ok: true }); }
 
   // pagine riassuntive
   if (req.method === 'GET' && p === '/api/zero') {
