@@ -86,7 +86,7 @@ class Analyzer {
           });
           row.tracks = {
             ref: refTracks.length, multiDisc: refTracks.some((r) => r.disc > 1), pairs,
-            extra: tm.extra.map((t) => ({ id: t.id, title: t.title, ms: t.durationMs })),
+            extra: tm.extra.map((t) => ({ id: t.id, title: t.title, ms: t.durationMs, no: t.trackNo, disc: t.discNo })),
             missing: tm.missing.map((t) => ({ title: t.t, sec: t.d, no: t.p, disc: t.disc })),
           };
           const multi = refTracks.some((r) => r.disc > 1);

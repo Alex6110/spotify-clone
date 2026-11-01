@@ -176,9 +176,10 @@ async function pageArtist(id) {
         <button class="btn small" data-ign="${m.id}">Ignora</button></div>`).join('')}</div>`
       : `<div class="empty-state">${r.cached ? 'Non risulta mancare nessun album.' : 'Discografia non disponibile.'}</div>`;
   };
-  function trackActions(trackId, albumId) {
+  function trackActions(trackId, albumId, title, no, disc) {
     const opts = r.albums.filter((x) => x.id !== albumId).map((x) => `<option value="${x.id}">${esc(x.title)}</option>`).join('');
     return `<td style="white-space:nowrap"><select data-act="move" data-track="${trackId}" style="max-width:150px"><option value="">Sposta in…</option>${opts}<option value="new">Nuovo album…</option></select>
+      <button class="btn small" data-act="edit" data-track="${trackId}" data-title="${esc(title)}" data-no="${no ?? ''}" data-disc="${disc ?? ''}">Modifica</button>
       <button class="btn small" data-act="feat" data-track="${trackId}">Artista</button>
       <button class="btn small" data-act="rm" data-track="${trackId}">${ic('x')} Rimuovi</button></td>`;
   }
@@ -230,12 +231,12 @@ async function pageArtist(id) {
     if (t) {
       h += `<table><thead><tr><th></th><th>Nel tuo archivio</th><th class="num">Durata</th><th>Su Deezer</th><th class="num">Durata</th><th class="num">Differenza</th><th></th></tr></thead><tbody>
         ${t.pairs.map((p) => `<tr><td><input type="checkbox" data-sel="${p.id}"></td><td><span class="${p.orderBad ? 'warn-t' : 'dim'}" title="${p.orderBad ? `numero attuale ${p.ourNo ?? '—'}, nella discografia ${p.refNo}` : ''}">${p.ourNo ?? '—'}.</span> ${esc(p.title)}</td><td class="num ${p.zero ? 'bad-t' : ''}">${p.zero ? '0:00' : dur(p.ms)}</td><td class="dim">${esc(p.refTitle)}</td><td class="num">${mmss(p.refSec)}</td>
-          <td class="num ${p.bad ? 'bad-t' : 'dim'}">${p.diff == null ? '—' : `${p.diff > 0 ? '+' : ''}${p.diff} s`}</td>${trackActions(p.id, al.id)}</tr>`).join('')}
-        ${t.extra.map((p) => `<tr><td><input type="checkbox" data-sel="${p.id}"></td><td>${esc(p.title)}</td><td class="num">${dur(p.ms)}</td><td class="warn-t" colspan="3">non presente nell'album di riferimento</td>${trackActions(p.id, al.id)}</tr>`).join('')}
+          <td class="num ${p.bad ? 'bad-t' : 'dim'}">${p.diff == null ? '—' : `${p.diff > 0 ? '+' : ''}${p.diff} s`}</td>${trackActions(p.id, al.id, p.title, p.ourNo, p.ourDisc)}</tr>`).join('')}
+        ${t.extra.map((p) => `<tr><td><input type="checkbox" data-sel="${p.id}"></td><td>${esc(p.title)}</td><td class="num">${dur(p.ms)}</td><td class="warn-t" colspan="3">non presente nell'album di riferimento</td>${trackActions(p.id, al.id, p.title, p.no, p.disc)}</tr>`).join('')}
         ${t.missing.map((p) => `<tr><td></td><td class="warn-t" colspan="2">mancante</td><td class="dim">${p.disc > 1 ? `${p.disc}-` : ''}${p.no}. ${esc(p.title)}</td><td class="num">${mmss(p.sec)}</td><td></td><td></td></tr>`).join('')}
         </tbody></table>`;
     } else {
-      h += `<p class="dim">Senza album di riferimento non posso confrontare i brani.</p><table><tbody>${(al.ownTracks || []).map((p) => `<tr><td><input type="checkbox" data-sel="${p.id}"></td><td>${esc(p.title)}</td><td class="num">${dur(p.durationMs)}</td>${trackActions(p.id, al.id)}</tr>`).join('')}</tbody></table>`;
+      h += `<p class="dim">Senza album di riferimento non posso confrontare i brani.</p><table><tbody>${(al.ownTracks || []).map((p) => `<tr><td><input type="checkbox" data-sel="${p.id}"></td><td>${esc(p.title)}</td><td class="num">${dur(p.durationMs)}</td>${trackActions(p.id, al.id, p.title, p.trackNo, p.discNo)}</tr>`).join('')}</tbody></table>`;
     }
     h += `<div class="bar"><input type="search" data-act="tsearch" placeholder="Aggiungi a questo album un brano già presente nell'archivio: cerca titolo o artista…" style="width:min(520px,100%)"></div><div data-tres></div>`;
     return h;
@@ -313,6 +314,11 @@ async function pageArtist(id) {
       if (b.dataset.act === 'rm') {
         if (!confirm('Rimuovere il brano dall\'archivio?\nIl file viene spostato nella cartella .cestino (non cancellato) e sparisce dal database, compresi Mi piace e playlist.')) return;
         return busy(b, async () => { await post(`/api/track/${b.dataset.track}/remove`); toast('Brano rimosso'); await reload(); });
+      }
+      if (b.dataset.act === 'edit') {
+        const title = prompt('Titolo del brano:', b.dataset.title); if (!title) return;
+        const no = prompt('Numero di traccia nell\'album (il file diventerà "NN - Titolo"):', b.dataset.no); if (no === null) return;
+        return busy(b, async () => { await post(`/api/track/${b.dataset.track}/edit`, { title, no, disc: b.dataset.disc }); toast('Brano aggiornato'); await reload(); });
       }
       if (b.dataset.act === 'feat') {
         const name = prompt('Artista di questo brano (per i featuring: scrivi il nome esatto, se non esiste lo creo).\nIl file non viene spostato.');

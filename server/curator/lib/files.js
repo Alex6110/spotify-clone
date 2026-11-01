@@ -228,6 +228,37 @@ function applyRename(store, plan, onlyIds) {
   return { done, skipped };
 }
 
+/** Modifica a mano titolo e numero di un brano: rinomina il file (NN - Titolo.ext) e aggiorna il database. L'ID resta lo stesso. */
+function editTrack(store, trackId, { title, no, disc }) {
+  const root = musicRoot(store);
+  const t = store.track(trackId);
+  if (!t) throw new Error('Brano inesistente');
+  const newTitle = T.cleanSpaces(title);
+  if (!newTitle) throw new Error('Il titolo non può essere vuoto');
+  const trackNo = Number(no) > 0 ? Number(no) : null;
+  const discNo = Number(disc) > 0 ? Number(disc) : (t.discNo || 1);
+  const ext = path.extname(t.relPath).slice(1);
+  const dir = path.posix.dirname(t.relPath);
+  const to = nfc(`${dir}/${T.trackFileName({ title: newTitle, trackNo, discNo: discNo > 1 ? discNo : null, ext })}`);
+  const src = locate(root, t.relPath);
+  if (!src) throw new Error(`Il file non esiste sul disco: ${t.relPath}`);
+  store.backup();
+  if (nfc(t.relPath) !== to) {
+    if (store.get('SELECT id FROM Track WHERE relPath = ? AND id != ?', to, trackId)) throw new Error('Esiste già un brano con questo nome in questa cartella');
+    const dest = path.join(root, to);
+    const existing = locate(root, to);
+    if (existing && path.resolve(existing).toLowerCase() !== path.resolve(src).toLowerCase()) throw new Error('Esiste già un file con questo nome');
+    fs.renameSync(src, dest);
+    try { store.run('UPDATE Track SET relPath = ?, title = ?, titleKey = ?, trackNo = ?, discNo = ? WHERE id = ?', to, newTitle, T.normKey(newTitle), trackNo, discNo, trackId); }
+    catch (e) { fs.renameSync(dest, src); throw e; }
+  } else {
+    store.run('UPDATE Track SET title = ?, titleKey = ?, trackNo = ?, discNo = ? WHERE id = ?', newTitle, T.normKey(newTitle), trackNo, discNo, trackId);
+  }
+  store.moveOverride(t.relPath, to, { title: newTitle, trackNo, discNo });
+  log(store, { op: 'edit', trackId, from: t.relPath, to, title: newTitle, trackNo });
+  return { relPath: to, title: newTitle, trackNo };
+}
+
 // ---------- nuovi file dal computer ----------
 let mm = null;
 async function readTags(file) {
@@ -361,4 +392,4 @@ async function addFromPath(store, albumId, srcPath, slot, move) {
   return { ...r, moved };
 }
 
-module.exports = { artistsWithoutAlbums, foldArtist, deleteArtist, renameArtist, listDir, addFromPath, moveTrack, removeTrack, setTrackArtist, fileTitle, renamePlan, applyRename, addFile, musicRoot };
+module.exports = { editTrack, artistsWithoutAlbums, foldArtist, deleteArtist, renameArtist, listDir, addFromPath, moveTrack, removeTrack, setTrackArtist, fileTitle, renamePlan, applyRename, addFile, musicRoot };

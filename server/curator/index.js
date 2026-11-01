@@ -212,6 +212,7 @@ async function route(req, res) {
     summaryCache = null;
     return send(res, 200, r);
   }
+  if (req.method === 'POST' && (x = m(/^\/api\/track\/(\d+)\/edit$/))) { const r = files.editTrack(store, Number(x[1]), await readJson(req)); summaryCache = null; return send(res, 200, r); }
   if (req.method === 'POST' && (x = m(/^\/api\/track\/(\d+)\/remove$/))) {
     const r = files.removeTrack(store, Number(x[1])); summaryCache = null;
     return send(res, 200, r);
