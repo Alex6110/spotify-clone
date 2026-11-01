@@ -207,7 +207,7 @@ const QueueSheetUI = React.memo(({
       />
       
       <motion.div 
-        className="mobile-queue-sheet"
+        className={`mobile-queue-sheet${position === 'full' ? ' is-full' : ''}`}
         drag={isDragging ? false : "y"}
         onPointerDown={(e) => e.stopPropagation()}
         // Riportato alla normalità: il foglio gestisce il suo drag in modo nativo

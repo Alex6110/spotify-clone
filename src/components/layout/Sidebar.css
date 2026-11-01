@@ -3,7 +3,7 @@
   background: var(--panel); border-right: 1px solid var(--line);
   transform: translateX(-102%); visibility: hidden;
   transition: transform .3s cubic-bezier(.4, 0, .2, 1), visibility 0s linear .3s;
-  z-index: 999; padding: 20px; overflow-y: auto;
+  z-index: 999; padding: calc(20px + var(--safe-top)) 20px calc(20px + var(--safe-bottom)); overflow-y: auto;
 }
 .sidebar-menu.open { transform: none; visibility: visible; transition: transform .3s cubic-bezier(.4, 0, .2, 1); }
 .sidebar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }

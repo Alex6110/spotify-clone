@@ -206,7 +206,7 @@ h1, h2, h3, h4, p { margin: 0; }
 /* ---------- Auth ---------- */
 .auth-container {
   display: flex; justify-content: center; align-items: center;
-  min-height: 100dvh; width: 100%; padding: 24px 16px;
+  min-height: 100dvh; width: 100%; padding: calc(24px + var(--safe-top)) 16px calc(24px + var(--safe-bottom));
   overflow-y: auto; position: fixed; inset: 0;
   background: radial-gradient(900px 500px at 50% -10%, color-mix(in srgb, var(--accent) 22%, transparent), transparent), var(--bg);
 }

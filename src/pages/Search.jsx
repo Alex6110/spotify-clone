@@ -1,6 +1,8 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search as SearchIcon } from 'lucide-react';
+import { Search as SearchIcon, Clock, X } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { readHistory, addHistory, removeHistory, clearHistory } from '../lib/searchHistory';
 import { PlayerContext } from '../context/PlayerContext';
 import { api, coverOf, errorMessage, formatDuration, isPlayable } from '../lib/api';
 import ArtistAvatar from '../components/ui/ArtistAvatar';
@@ -14,6 +16,11 @@ const Search = () => {
   const [results, setResults] = useState(null);
   const [error, setError] = useState('');
   const { playSong, currentSong } = useContext(PlayerContext);
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const [history, setHistory] = useState(() => readHistory(userId));
+  useEffect(() => { setHistory(readHistory(userId)); }, [userId]);
+  const remember = (text) => setHistory(addHistory(userId, text));
 
   useEffect(() => {
     if (q.trim().length < 2) { setResults(null); return undefined; }
@@ -25,6 +32,15 @@ const Search = () => {
     }, 250);
     return () => { cancelled = true; clearTimeout(t); };
   }, [q]);
+
+  // la ricerca viene ricordata quando ti fermi a guardare i risultati (non a ogni lettera)
+  useEffect(() => {
+    if (!results || q.trim().length < 2) return undefined;
+    if (!results.artists.length && !results.albums.length && !results.tracks.length) return undefined;
+    const t = setTimeout(() => remember(q), 1800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results]);
 
   const empty = results && !results.artists.length && !results.albums.length && !results.tracks.length;
 
@@ -42,7 +58,23 @@ const Search = () => {
       </label>
 
       {error && <p className="form-error">{error}</p>}
-      {!results && !error && <p className="muted-text">Cerca brani, album e artisti della tua libreria.</p>}
+      {!results && !error && q.trim().length < 2 && history.length > 0 && (
+        <section className="search-history">
+          <div className="search-history-head">
+            <h3>Ricerche recenti</h3>
+            <button type="button" className="link-btn" onClick={() => setHistory(clearHistory(userId))}>Cancella tutto</button>
+          </div>
+          {history.map((h) => (
+            <div key={h} className="search-history-row">
+              <button type="button" className="search-history-item" onClick={() => setParams({ q: h }, { replace: true })}>
+                <Clock size={16} /><span>{h}</span>
+              </button>
+              <button type="button" className="icon-btn" aria-label={`Rimuovi "${h}" dalla cronologia`} onClick={() => setHistory(removeHistory(userId, h))}><X size={16} /></button>
+            </div>
+          ))}
+        </section>
+      )}
+      {!results && !error && history.length === 0 && <p className="muted-text">Cerca brani, album e artisti della tua libreria.</p>}
       {empty && <p className="muted-text">Nessun risultato per "{q}".</p>}
 
       {results?.artists.length > 0 && (
@@ -50,7 +82,7 @@ const Search = () => {
           <h3>Artisti</h3>
           <div className="horizontal-scroll">
             {results.artists.map((a) => (
-              <Link to={`/artist/${a.id}`} key={a.id} className="artist-chip">
+              <Link to={`/artist/${a.id}`} key={a.id} className="artist-chip" onClick={() => remember(q)}>
                 <ArtistAvatar artist={a} size={96} />
                 <span>{a.name}</span>
               </Link>
@@ -64,7 +96,7 @@ const Search = () => {
           <h3>Brani</h3>
           <div className="track-list">
             {results.tracks.map((t) => (
-              <div key={t.id} className={`track-row ${currentSong?.id === t.id ? 'active-song' : ''} ${isPlayable(t) ? '' : 'is-broken'}`} onClick={() => playSong(t, results.tracks)}>
+              <div key={t.id} className={`track-row ${currentSong?.id === t.id ? 'active-song' : ''} ${isPlayable(t) ? '' : 'is-broken'}`} onClick={() => { remember(q); playSong(t, results.tracks); }}>
                 <img src={coverOf(t)} alt="" loading="lazy" />
                 <div className="track-row-text">
                   <span className="song-name">{t.title}</span>
@@ -84,7 +116,7 @@ const Search = () => {
           <h3>Album</h3>
           <div className="horizontal-scroll">
             {results.albums.map((a) => (
-              <Link to={`/album/${a.id}`} key={a.id} className="album-card">
+              <Link to={`/album/${a.id}`} key={a.id} className="album-card" onClick={() => remember(q)}>
                 <img src={coverOf(a)} alt="" className="album-cover" loading="lazy" />
                 <p>{a.title}</p>
                 <span>{a.artist}</span>

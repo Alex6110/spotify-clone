@@ -255,3 +255,19 @@ a.pill-btn { display: inline-flex; align-items: center; gap: 8px; }
 .is-broken .song-name { text-decoration: line-through; text-decoration-color: rgba(255, 255, 255, .35); }
 .diag-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .diag-actions .pill-btn { display: inline-flex; align-items: center; gap: 8px; }
+
+/* ---------- Cronologia ricerche ---------- */
+.search-history { margin-top: 8px; }
+.search-history-head { display: flex; align-items: center; justify-content: space-between; }
+.search-history-row { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
+.search-history-item {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 4px;
+  background: none; border: 0; color: var(--text); text-align: left; cursor: pointer; font: inherit;
+}
+.search-history-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-history-item svg { color: var(--text-2); flex: none; }
+.search-history .icon-btn, .search-history .link-btn {
+  background: none; border: 0; color: var(--text-2); cursor: pointer; padding: 8px; font: inherit; border-radius: 8px;
+}
+.search-history .link-btn { font-size: 13px; }
+.search-history .icon-btn:hover, .search-history .link-btn:hover { color: var(--text); }

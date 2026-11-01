@@ -12,7 +12,7 @@
   position: fixed;
   left: 0;
   width: 100%;
-  height: 100vh;
+  height: 100%; /* non 100vh: nell'app installata su iPhone 100vh è più alto della finestra */
   background: #121212;
   border-top-left-radius: 20px;
   border-top-right-radius: 20px;
@@ -24,6 +24,7 @@
   /* IMPORTANTE: aggiungi un padding-bottom che lasci spazio alla barra sottostante */
   padding-bottom: 110px; 
 }
+.mobile-queue-sheet.is-full { padding-top: var(--safe-top); } /* sotto la Dynamic Island quando il foglio è tutto aperto */
 
 /* Miglioriamo la maniglia */
 .queue-handle {
