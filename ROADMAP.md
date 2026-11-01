@@ -95,3 +95,19 @@ Stima: fasi 3-5 sono una decina di passi come quelli già fatti; la fase 6 sono 
 - **Spotify**: fino a 10.000 brani su ciascuno di 5 dispositivi, e bisogna collegarsi almeno una volta ogni 30 giorni. I file sono cifrati e nascosti dentro l'app. Per ridurre lo spazio usa una qualità più bassa (da quanto mi risulta, circa 96-320 kbps a seconda dell'impostazione).
 - **Il file vero**: "Scarica il file" e lo ZIP salvano i file nei File dell'iPhone, utilizzabili con qualsiasi lettore. Sono cose diverse dall'offline dentro l'app.
 - **Limiti da iPhone**: lo spazio delle app web è gestito da iOS e può essere ripulito se il telefono è pieno (il pulsante "Proteggi i download" in Impostazioni lo riduce). Provalo in modo aereo.
+
+## Stato al 1 novembre 2026 - cosa resta da fare
+
+**Archivio (in corso, strumento `npm run curator`)**
+- Finire il controllo artista per artista (foto, copertine, mancanti, durate, ordine) e rippare i 666 file vuoti (`da-rippare.txt`).
+- Unire gli artisti doppi ("Santana" / "Santana Feat. ...") con una tabella di alias, e rinominare le cartelle degli album.
+- Featuring veri: tabella "partecipazioni" (un brano in piu artisti) e album condivisi.
+
+**App**
+- Altezza su iPhone: la parte alta non tiene conto della Dynamic Island.
+- Cronologia ricerche non salvata.
+- Interfaccia e comandi da rifinire (giro completo di prove su iPhone e Mac).
+- Fluidita: miniature delle copertine, liste virtualizzate, precaricamento del brano successivo.
+- Fase 4: mix e raccomandazioni ("Mix del giorno", "Riscoperti", "Simili a...").
+- Fase 5: riordino playlist, menu del player, gapless/crossfade, testi.
+- Fase 6: server di casa (mini PC), backup, accesso da fuori.

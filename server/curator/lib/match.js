@@ -99,35 +99,64 @@ function matchTracks(ours, refs) {
   const usedO = new Set(), usedR = new Set();
   const pairs = [];
   const take = (oi, ri) => { usedO.add(oi); usedR.add(ri); pairs.push({ ours: ours[oi], ref: refs[ri] }); };
-  const oc = ours.map((o) => cleanTrack(o.title));
+  const oc = ours.map((o) => cleanTrack(o.title)); // senza parentesi
   const rc = refs.map((r) => cleanTrack(r.t));
-  // 1) titolo identico
-  for (let oi = 0; oi < ours.length; oi++) {
-    let pick = -1;
-    for (let ri = 0; ri < refs.length; ri++) {
-      if (usedR.has(ri) || !oc[oi] || oc[oi] !== rc[ri]) continue;
-      if (pick < 0 || (refs[ri].p === ours[oi].trackNo && (refs[ri].disc || 1) === (ours[oi].discNo || 1))) pick = ri;
+  const of = ours.map((o) => norm(String(o.title).replace(/_/g, ' '))); // con parentesi: "Rigurgito (Tv Version)" = "Rigurgito Tv Version"
+  const rf = refs.map((r) => norm(r.t));
+  const samePos = (oi, ri) => refs[ri].p === ours[oi].trackNo && (refs[ri].disc || 1) === (ours[oi].discNo || 1);
+  const durGap = (oi, ri) => (ours[oi].durationMs > 0 ? Math.abs(ours[oi].durationMs / 1000 - refs[ri].d) : null);
+
+  // 1) titolo identico (con o senza parentesi)
+  for (const pass of [of, oc]) {
+    const rr = pass === of ? rf : rc;
+    for (let oi = 0; oi < ours.length; oi++) {
+      if (usedO.has(oi) || !pass[oi]) continue;
+      let pick = -1;
+      for (let ri = 0; ri < refs.length; ri++) {
+        if (usedR.has(ri) || pass[oi] !== rr[ri]) continue;
+        if (pick < 0 || samePos(oi, ri)) pick = ri;
+      }
+      if (pick >= 0) take(oi, pick);
     }
-    if (pick >= 0) take(oi, pick);
   }
   // 2) stessa posizione e titolo simile
   for (let oi = 0; oi < ours.length; oi++) {
     if (usedO.has(oi)) continue;
     for (let ri = 0; ri < refs.length; ri++) {
-      if (usedR.has(ri)) continue;
-      if (refs[ri].p === ours[oi].trackNo && (refs[ri].disc || 1) === (ours[oi].discNo || 1) && similarity(oc[oi], rc[ri]) >= 0.5) { take(oi, ri); break; }
+      if (!usedR.has(ri) && samePos(oi, ri) && similarity(oc[oi], rc[ri]) >= 0.5) { take(oi, ri); break; }
     }
   }
-  // 3) titolo molto simile ovunque
+  // 3) un titolo contiene l'altro ("Rigurgito" / "Rigurgito Tv Version"), preferendo la durata più vicina
   for (let oi = 0; oi < ours.length; oi++) {
     if (usedO.has(oi)) continue;
-    let best = -1, bs = 0.7;
+    const A = tokens(of[oi]);
+    let best = -1, bg = Infinity;
     for (let ri = 0; ri < refs.length; ri++) {
       if (usedR.has(ri)) continue;
-      const s = similarity(oc[oi], rc[ri]);
-      if (s >= bs) { bs = s; best = ri; }
+      const B = tokens(rf[ri]);
+      if (!A.size || !B.size) continue;
+      let common = 0; for (const w of A) if (B.has(w)) common += 1;
+      const contained = common === Math.min(A.size, B.size) || common / Math.max(A.size, B.size) >= 0.7;
+      if (!contained) continue;
+      const g = durGap(oi, ri) ?? 30;
+      if (g < bg) { bg = g; best = ri; }
     }
     if (best >= 0) take(oi, best);
+  }
+  // 4) stessa durata (entro 4 secondi) e stessa posizione; oppure un solo brano rimasto per parte con durata vicina (entro 10%)
+  for (let oi = 0; oi < ours.length; oi++) {
+    if (usedO.has(oi)) continue;
+    for (let ri = 0; ri < refs.length; ri++) {
+      if (usedR.has(ri)) continue;
+      const g = durGap(oi, ri);
+      if (g != null && g <= 4 && samePos(oi, ri)) { take(oi, ri); break; }
+    }
+  }
+  const leftO = ours.map((_, i) => i).filter((i) => !usedO.has(i));
+  const leftR = refs.map((_, i) => i).filter((i) => !usedR.has(i));
+  if (leftO.length === 1 && leftR.length === 1) {
+    const g = durGap(leftO[0], leftR[0]);
+    if (g != null && g <= Math.max(6, refs[leftR[0]].d * 0.1)) take(leftO[0], leftR[0]);
   }
   return {
     pairs,

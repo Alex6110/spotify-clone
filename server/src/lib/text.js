@@ -51,6 +51,12 @@ function parseTrackFile(fileName) {
  *  Artista - Album/01 - x.mp3      -> artista, album
  *  01 - x.mp3 (nella radice)       -> sconosciuti
  */
+/**
+ * Su macOS il carattere "/" non può stare in un nome di file: Finder mostra "AC/DC" ma il percorso reale è "AC:DC".
+ * Per i nomi presi dalle cartelle rimettiamo la barra (solo su Mac: altrove i due punti sono veri due punti).
+ */
+const fsName = (s) => (process.platform === 'darwin' && s ? String(s).replace(/:/g, '/') : s);
+
 function parseRelPath(relPath) {
   const parts = relPath.split(/[\\/]/).filter(Boolean);
   const dirs = parts.slice(0, -1);
@@ -74,8 +80,8 @@ function parseRelPath(relPath) {
   } else {
     albumMissing = true;
   }
-  artist = cleanSpaces(artist) || 'Artista sconosciuto';
-  album = stripArtistPrefix(album || 'Album sconosciuto', artist);
+  artist = cleanSpaces(fsName(artist)) || 'Artista sconosciuto';
+  album = stripArtistPrefix(fsName(album || 'Album sconosciuto'), artist);
   return { artist, album, discNo, albumMissing, fileName: parts[parts.length - 1] };
 }
 
@@ -133,7 +139,7 @@ function sameArtistFamily(a, b) {
   if (!ka || !kb) return false;
   if (ka === kb) return true;
   const [short, long] = ka.length <= kb.length ? [ka, kb] : [kb, ka];
-  if (short.length < 3) return false;
+  if (short.length < 2) return false; // "AC" è una parte valida di "AC DC"
   return long.startsWith(`${short} `) || long.endsWith(` ${short}`) || long.includes(` ${short} `);
 }
 
@@ -150,7 +156,7 @@ function sortTracks(tracks) {
 }
 
 module.exports = {
-  sortTracks,
+  sortTracks, fsName,
   sameArtistFamily,
   safeFileName, trackFileName,
   legacySlug,

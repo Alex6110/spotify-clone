@@ -8,7 +8,7 @@ const ICON = {
   timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>', image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/>',
   sync: '<path d="M20 11a8 8 0 00-14-4M4 4v4h4M4 13a8 8 0 0014 4M20 20v-4h-4"/>', check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
   up: '<path d="M12 16V5M7 10l5-5 5 5M5 20h14"/>', link: '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
-  chevron: '<path d="M9 6l6 6-6 6"/>', copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/>', x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  chevron: '<path d="M9 6l6 6-6 6"/>', broom: '<path d="M4 20l5-5M14 4l6 6-8 8-6-6zM9 15l-2 2"/>', copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 012-2h9"/>', x: '<path d="M6 6l12 12M18 6L6 18"/>',
 };
 const ic = (n) => `<svg class="i" viewBox="0 0 24 24">${ICON[n] || ''}</svg>`;
 const mmss = (sec) => { sec = Math.max(0, Math.round(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
@@ -40,7 +40,7 @@ function pickFile(accept, cb, multiple) {
 // ---------- navigazione ----------
 const PAGES = [
   ['#/', 'Artisti', 'users'], ['#/missing', 'Mancanti', 'plus'], ['#/zero', 'Brani a 00:00', 'clock'],
-  ['#/durations', 'Durate diverse', 'timer'], ['#/covers', 'Copertine', 'image'], ['#/sync', 'Sincronizzazione', 'sync'],
+  ['#/durations', 'Durate diverse', 'timer'], ['#/covers', 'Copertine', 'image'], ['#/cleanup', 'Pulizia artisti', 'broom'], ['#/sync', 'Sincronizzazione', 'sync'],
 ];
 function renderNav(active) {
   $('#nav').innerHTML = PAGES.map(([h, l, i]) => `<a href="${h}" class="${active === h ? 'on' : ''}">${ic(i)}<span>${l}</span></a>`).join('');
@@ -58,6 +58,7 @@ async function router() {
     else if (hash === '#/zero') await pageZero();
     else if (hash === '#/durations') await pageDurations();
     else if (hash === '#/covers') await pageCovers();
+    else if (hash === '#/cleanup') await pageCleanup();
     else if (hash === '#/sync') await pageSync();
     else await pageArtists();
   } catch (e) { main.innerHTML = `<div class="note">${esc(e.message)}</div>`; }
@@ -125,6 +126,7 @@ async function pageArtist(id) {
         <p class="sub" style="margin:0 0 10px">${plural(r.albums.length, 'album', 'album')} nel database${r.ref?.info ? ` · riferimento: ${esc(r.ref.info.name)}` : ''}</p>
         <div class="bar" style="margin:0">
           <button class="btn ${st.confirmed ? 'ok' : 'primary'}" id="confirm">${ic('check')} ${st.confirmed ? 'Confermato' : 'Segna come controllato'}</button>
+          <button class="btn" id="renameartist">Rinomina</button>
           <button class="btn" id="upphoto">${ic('up')} Carica foto</button>
           ${a.photo ? `<button class="btn" id="rmphoto">${ic('x')} Rimuovi foto</button>` : ''}
         </div></div></div>
@@ -143,6 +145,7 @@ async function pageArtist(id) {
 
   const reload = () => pageArtist(id);
   $('#confirm').onclick = (e) => busy(e.currentTarget, async () => { await post(`/api/artist/${id}/state`, { confirmed: !st.confirmed }); await reload(); });
+  $('#renameartist').onclick = () => { const n = prompt('Nuovo nome dell\'artista (es. AC/DC):', a.name); if (n && n.trim() !== a.name) busy($('#renameartist'), async () => { await post(`/api/artist/${id}/rename`, { name: n }); toast('Nome aggiornato'); await reload(); }); };
   $('#upphoto').onclick = () => pickFile('image/*', (f) => busy($('#upphoto'), async () => { await api(`/api/artist/${id}/photo`, { method: 'PUT', body: f }); toast('Foto aggiornata'); await reload(); }));
   if ($('#rmphoto')) $('#rmphoto').onclick = (e) => busy(e.currentTarget, async () => { await api(`/api/artist/${id}/photo`, { method: 'DELETE' }); await reload(); });
 
@@ -210,6 +213,7 @@ async function pageArtist(id) {
     const ref = al.ref; const t = al.tracks;
     const opts = [`<option value="">Scegli album di riferimento…</option>`, `<option value="-1">Nessuno: non esiste su Deezer</option>`]
       .concat((r.allRefAlbums || []).map((x) => `<option value="${x.id}" ${ref && ref.id === x.id ? 'selected' : ''}>${esc(x.title)} (${esc(typeLabel(x.type))}${x.date ? `, ${esc(x.date.slice(0, 4))}` : ''})</option>`));
+    const moveOpts = r.albums.filter((x) => x.id !== al.id).map((x) => `<option value="${x.id}">${esc(x.title)}</option>`).join('');
     let h = `<div class="bar" style="margin-top:0">
       ${ref && ref.cover ? '<button class="btn small" data-act="usecover">Usa la copertina di Deezer</button>' : ''}
       <button class="btn small" data-act="upcover">${ic('up')} Carica copertina</button>
@@ -217,20 +221,31 @@ async function pageArtist(id) {
       <select data-act="link" style="max-width:340px">${opts.join('')}</select></div>
     <div class="bar">
       ${t ? '<button class="btn small" data-act="plan">Nomi e ordine secondo Deezer…</button>' : ''}
-      <button class="btn small" data-act="addfiles">${ic('plus')} Aggiungi file dal computer…</button></div>
+      <button class="btn small" data-act="addfolder">${ic('plus')} Aggiungi da una cartella del Mac (sposta)…</button>
+      <button class="btn small" data-act="addfiles">${ic('up')} Aggiungi file (copia)…</button></div>
+    <div class="bar" data-selbar><button class="btn small" data-act="selall">Seleziona tutti</button><span class="dim" data-selcount>Nessun brano selezionato</span>
+      <button class="btn small" data-act="rmsel">${ic('x')} Rimuovi selezionati</button>
+      <select data-act="movesel" style="max-width:220px"><option value="">Sposta selezionati in…</option>${moveOpts}</select></div>
     <div data-panel></div>`;
     if (t) {
-      h += `<table><thead><tr><th>Nel tuo archivio</th><th class="num">Durata</th><th>Su Deezer</th><th class="num">Durata</th><th class="num">Differenza</th><th></th></tr></thead><tbody>
-        ${t.pairs.map((p) => `<tr><td><span class="${p.orderBad ? 'warn-t' : 'dim'}" title="${p.orderBad ? `numero attuale ${p.ourNo ?? '—'}, nella discografia ${p.refNo}` : ''}">${p.ourNo ?? '—'}.</span> ${esc(p.title)}</td><td class="num ${p.zero ? 'bad-t' : ''}">${p.zero ? '0:00' : dur(p.ms)}</td><td class="dim">${esc(p.refTitle)}</td><td class="num">${mmss(p.refSec)}</td>
+      h += `<table><thead><tr><th></th><th>Nel tuo archivio</th><th class="num">Durata</th><th>Su Deezer</th><th class="num">Durata</th><th class="num">Differenza</th><th></th></tr></thead><tbody>
+        ${t.pairs.map((p) => `<tr><td><input type="checkbox" data-sel="${p.id}"></td><td><span class="${p.orderBad ? 'warn-t' : 'dim'}" title="${p.orderBad ? `numero attuale ${p.ourNo ?? '—'}, nella discografia ${p.refNo}` : ''}">${p.ourNo ?? '—'}.</span> ${esc(p.title)}</td><td class="num ${p.zero ? 'bad-t' : ''}">${p.zero ? '0:00' : dur(p.ms)}</td><td class="dim">${esc(p.refTitle)}</td><td class="num">${mmss(p.refSec)}</td>
           <td class="num ${p.bad ? 'bad-t' : 'dim'}">${p.diff == null ? '—' : `${p.diff > 0 ? '+' : ''}${p.diff} s`}</td>${trackActions(p.id, al.id)}</tr>`).join('')}
-        ${t.extra.map((p) => `<tr><td>${esc(p.title)}</td><td class="num">${dur(p.ms)}</td><td class="warn-t" colspan="3">non presente nell'album di riferimento</td>${trackActions(p.id, al.id)}</tr>`).join('')}
-        ${t.missing.map((p) => `<tr><td class="warn-t" colspan="2">mancante</td><td class="dim">${p.disc > 1 ? `${p.disc}-` : ''}${p.no}. ${esc(p.title)}</td><td class="num">${mmss(p.sec)}</td><td></td><td></td></tr>`).join('')}
+        ${t.extra.map((p) => `<tr><td><input type="checkbox" data-sel="${p.id}"></td><td>${esc(p.title)}</td><td class="num">${dur(p.ms)}</td><td class="warn-t" colspan="3">non presente nell'album di riferimento</td>${trackActions(p.id, al.id)}</tr>`).join('')}
+        ${t.missing.map((p) => `<tr><td></td><td class="warn-t" colspan="2">mancante</td><td class="dim">${p.disc > 1 ? `${p.disc}-` : ''}${p.no}. ${esc(p.title)}</td><td class="num">${mmss(p.sec)}</td><td></td><td></td></tr>`).join('')}
         </tbody></table>`;
     } else {
-      h += `<p class="dim">Senza album di riferimento non posso confrontare i brani.</p><table><tbody>${(al.ownTracks || []).map((p) => `<tr><td>${esc(p.title)}</td><td class="num">${dur(p.durationMs)}</td>${trackActions(p.id, al.id)}</tr>`).join('')}</tbody></table>`;
+      h += `<p class="dim">Senza album di riferimento non posso confrontare i brani.</p><table><tbody>${(al.ownTracks || []).map((p) => `<tr><td><input type="checkbox" data-sel="${p.id}"></td><td>${esc(p.title)}</td><td class="num">${dur(p.durationMs)}</td>${trackActions(p.id, al.id)}</tr>`).join('')}</tbody></table>`;
     }
     h += `<div class="bar"><input type="search" data-act="tsearch" placeholder="Aggiungi a questo album un brano già presente nell'archivio: cerca titolo o artista…" style="width:min(520px,100%)"></div><div data-tres></div>`;
     return h;
+  }
+  const selected = (box) => [...box.querySelectorAll('[data-sel]:checked')].map((c) => Number(c.dataset.sel));
+  const updateSel = (box) => { const n = selected(box).length; $('[data-selcount]', box).textContent = n ? `${n} selezionati` : 'Nessun brano selezionato'; };
+  function showFolder(al, panel) {
+    panel.innerHTML = `<div class="card" style="margin:10px 0"><b>Aggiungi file da una cartella del Mac</b>
+      <p class="dim" style="margin:4px 0 8px">Incolla il percorso della cartella (in Finder: seleziona la cartella e premi Opzione + Cmd + C). Leggo anche le sottocartelle. I file vengono <b>spostati</b> nell'album col nome giusto: l'originale sparisce dalla cartella di partenza.</p>
+      <div class="bar" style="margin:0"><input type="search" data-dir placeholder="/Users/…/Downloads/nome cartella" style="width:min(560px,100%)"><button class="btn small primary" data-act="listdir">Leggi cartella</button></div></div>`;
   }
   const base = (rel) => rel.split('/').pop();
   async function showPlan(al, panel) {
@@ -257,10 +272,10 @@ async function pageArtist(id) {
     return { no: m ? Number(m[2]) : '', disc: m && m[1] ? Number(m[1]) : '', title: (m ? m[3] : stem).trim() };
   };
   const nk = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '');
-  function showAdd(al, fl, panel) {
+  function showAdd(al, fl, panel, fromPath) {
     const slots = al.tracks ? al.tracks.missing : [];
     const used = new Set();
-    panel._files = fl;
+    panel._files = fl; panel._path = !!fromPath;
     panel.innerHTML = `<div class="card" style="margin:10px 0"><b>Aggiungi ${fl.length} file a "${esc(al.title)}"</b>
       <p class="dim" style="margin:4px 0 8px">Scegli a quale brano della discografia corrisponde ogni file: verrà copiato nella cartella dell'album col nome giusto. Il file originale resta dov'è.</p>
       <table><thead><tr><th>File</th><th>Brano</th><th>Titolo (se a mano)</th><th>N.</th></tr></thead><tbody>${fl.map((f, i) => {
@@ -271,7 +286,7 @@ async function pageArtist(id) {
           <td><select data-slot><option value="-1">A mano…</option>${slots.map((sl, k) => `<option value="${k}" ${k === pick ? 'selected' : ''}>${sl.disc > 1 ? `${sl.disc}-` : ''}${sl.no}. ${esc(sl.title)}</option>`).join('')}</select></td>
           <td><input type="search" data-title value="${esc(g.title)}" style="width:200px"></td><td><input type="number" data-no value="${g.no}" style="width:64px"></td></tr>`;
       }).join('')}</tbody></table>
-      <div class="bar"><button class="btn primary small" data-act="doadd">Carica ${fl.length} file</button></div></div>`;
+      <div class="bar">${fromPath ? '<label class="dim"><input type="checkbox" data-move checked> Sposta (cancella l\'originale dopo la copia)</label>' : ''}<button class="btn primary small" data-act="doadd">${fromPath ? 'Sposta' : 'Carica'} ${fl.length} file</button></div></div>`;
   }
   async function applyAdd(al, box) {
     const panel = $('[data-panel]', box); const fl = panel._files; const slots = al.tracks ? al.tracks.missing : [];
@@ -281,7 +296,8 @@ async function pageArtist(id) {
       const sl = k >= 0 ? slots[k] : { title: $('[data-title]', tr).value.trim(), no: Number($('[data-no]', tr).value) || '', disc: 1 };
       if (!sl.title) { errs.push(`${f.name}: manca il titolo`); continue; }
       try {
-        await api(`/api/album/${al.id}/add?name=${encodeURIComponent(f.name)}&title=${encodeURIComponent(sl.title)}&no=${sl.no || ''}&disc=${sl.disc || ''}`, { method: 'PUT', body: f });
+        if (panel._path) await post(`/api/album/${al.id}/add-from-path`, { path: f.path, title: sl.title, no: sl.no || '', disc: sl.disc || '', move: !!$('[data-move]', panel)?.checked });
+        else await api(`/api/album/${al.id}/add?name=${encodeURIComponent(f.name)}&title=${encodeURIComponent(sl.title)}&no=${sl.no || ''}&disc=${sl.disc || ''}`, { method: 'PUT', body: f });
         ok += 1;
       } catch (e) { errs.push(`${f.name}: ${e.message}`); }
     }
@@ -303,6 +319,14 @@ async function pageArtist(id) {
         if (!name) return;
         return busy(b, async () => { await post(`/api/track/${b.dataset.track}/artist`, { name }); toast('Artista del brano aggiornato'); await reload(); });
       }
+      if (b.dataset.act === 'selall') { const boxes = [...box.querySelectorAll('[data-sel]')]; const all = boxes.every((c) => c.checked); boxes.forEach((c) => { c.checked = !all; }); return updateSel(box); }
+      if (b.dataset.act === 'rmsel') {
+        const ids = selected(box); if (!ids.length) return toast('Nessun brano selezionato', true);
+        if (!confirm(`Rimuovere ${ids.length} brani dall'archivio?\nI file vengono spostati nella cartella .cestino (non cancellati) e spariscono dal database, compresi Mi piace e playlist.`)) return;
+        return busy(b, async () => { for (const tid of ids) await post(`/api/track/${tid}/remove`); toast(`${ids.length} brani rimossi`); await reload(); });
+      }
+      if (b.dataset.act === 'addfolder') return showFolder(al, $('[data-panel]', box));
+      if (b.dataset.act === 'listdir') return busy(b, async () => { const d = await api(`/api/fs/list?dir=${encodeURIComponent($('[data-dir]', box).value)}`); if (!d.files.length) return toast('Nessun file audio in questa cartella', true); showAdd(al, d.files, $('[data-panel]', box), true); });
       if (b.dataset.act === 'plan') return busy(b, async () => showPlan(al, $('[data-panel]', box)));
       if (b.dataset.act === 'addfiles') return pickFile('audio/*,.mp3,.flac,.m4a,.aac,.ogg,.opus,.wav', (fl) => showAdd(al, fl, $('[data-panel]', box)), true);
       if (b.dataset.act === 'doplan') return busy(b, () => applyPlan(al, box));
@@ -327,6 +351,14 @@ async function pageArtist(id) {
       }, 300);
     };
     tab.onchange = (e) => {
+      if (e.target.matches('[data-sel]')) return updateSel(e.target.closest('.album'));
+      const mvs = e.target.closest('select[data-act=movesel]');
+      if (mvs) {
+        const box = mvs.closest('.album'); const ids = selected(box);
+        if (!mvs.value || !ids.length) { mvs.value = ''; return toast('Seleziona prima i brani', true); }
+        if (!confirm(`Spostare ${ids.length} brani in un altro album? I file vengono spostati anche sul disco.`)) { mvs.value = ''; return; }
+        return busy(mvs, async () => { for (const tid of ids) await post(`/api/track/${tid}/move`, { albumId: Number(mvs.value) }); toast(`${ids.length} brani spostati`); await reload(); });
+      }
       const mv = e.target.closest('select[data-act=move]');
       if (mv && mv.value) {
         const al = r.albums.find((x) => x.id === Number(mv.closest('.album').dataset.album));
@@ -435,6 +467,33 @@ async function pageCovers() {
       else { await post(`/api/album/${r.albumId}/state`, { confirmed: true }); toast('Segnata come controllata'); }
       card.remove();
     });
+  };
+}
+
+// ---------- Pulizia artisti ----------
+async function pageCleanup() {
+  const rows = await api('/api/artists/empty');
+  const frag = rows.filter((r) => r.fragment && r.tracks);
+  main.innerHTML = `
+    <h1>Pulizia artisti</h1>
+    <p class="sub">Artisti che non hanno nessun album. Spesso sono pezzi di nome creati per errore (es. "AC" da "AC/DC") oppure ospiti di featuring. "Riporta i brani" rimette ogni brano sotto l'artista del suo album e poi elimina l'artista vuoto.</p>
+    <div class="bar"><span class="dim">${rows.length} artisti senza album · ${frag.length} sembrano frammenti di un altro nome</span>
+      ${frag.length ? `<button class="btn primary" id="foldall">Riporta tutti i probabili frammenti (${frag.length})</button>` : ''}</div>
+    <div class="list">${rows.map((r) => `<div class="row" data-id="${r.id}">
+      <div class="grow"><div class="name">${esc(r.name)}</div>
+        <div class="meta">${plural(r.tracks, 'brano', 'brani')}${r.under.length ? ` · dentro album di: ${r.under.map((u) => `${esc(u.name)} (${u.n})`).join(', ')}` : ''}</div></div>
+      <div class="badges">${r.fragment ? '<span class="badge warn">probabile frammento</span>' : ''}
+        ${r.tracks ? '<button class="btn small" data-act="fold">Riporta i brani agli album</button>' : '<button class="btn small" data-act="del">Elimina</button>'}</div></div>`).join('') || '<div class="empty-state">Nessun artista senza album.</div>'}</div>`;
+  const one = async (id, kind) => { await (kind === 'del' ? api(`/api/artist/${id}`, { method: 'DELETE' }) : post(`/api/artist/${id}/fold`)); };
+  main.onclick = (e) => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const id = Number(b.closest('.row').dataset.id);
+    if (!confirm(b.dataset.act === 'del' ? 'Eliminare questo artista (vuoto)?' : 'Rimettere i brani sotto l\'artista dei loro album ed eliminare questo artista?')) return;
+    busy(b, async () => { await one(id, b.dataset.act); toast('Fatto'); await pageCleanup(); });
+  };
+  if ($('#foldall')) $('#foldall').onclick = (e) => {
+    if (!confirm(`Riportare i brani di ${frag.length} artisti ai loro album?`)) return;
+    busy(e.currentTarget, async () => { for (const r of frag) await one(r.id, 'fold'); toast(`${frag.length} artisti sistemati`); await pageCleanup(); });
   };
 }
 

@@ -193,7 +193,10 @@ async function main() {
       const title = T.cleanSpaces(ov.title) || T.cleanSpaces(c?.title) || fromName.title;
       const tagArtist = ov.keepAlbumArtist ? '' : T.cleanSpaces(c?.artist || '');
       // "Zucchero Feat. Eric Clapton" resta di Zucchero; un artista davvero diverso (compilation) ha il suo
-      const trackArtistId = tagArtist && !T.sameArtistFamily(tagArtist, albumArtistName) ? await artistId(tagArtist) : aId;
+      // l'ID3 v2.3 separa gli artisti con "/": "AC/DC" diventa ["AC", "DC"]. Provo anche il nome rimesso insieme.
+      const tagCandidates = [tagArtist, Array.isArray(c?.artists) && c.artists.length > 1 ? c.artists.join('/') : ''].filter(Boolean);
+      const sameFamily = tagCandidates.some((n) => T.sameArtistFamily(n, albumArtistName));
+      const trackArtistId = tagArtist && !sameFamily ? await artistId(tagArtist) : aId;
       const data = {
         title,
         titleKey: T.normKey(title),

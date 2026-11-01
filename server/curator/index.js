@@ -128,6 +128,9 @@ async function renamePlanFor(albumId) {
 }
 
 async function route(req, res) {
+  // lo strumento non ha login: accetta solo richieste dal tuo browser su localhost (non da altri siti aperti nel browser)
+  if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(req.headers.host || '')) return send(res, 403, { error: 'Host non consentito' });
+  if (req.method !== 'GET' && req.headers.origin && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(req.headers.origin)) return send(res, 403, { error: 'Origine non consentita' });
   const url = new URL(req.url, 'http://localhost');
   const p = decodeURIComponent(url.pathname);
   const m = (re) => re.exec(p);
@@ -239,6 +242,20 @@ async function route(req, res) {
       summaryCache = null;
       return send(res, 200, r);
     } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+  }
+
+  // artisti: pulizia
+  if (req.method === 'GET' && p === '/api/artists/empty') return send(res, 200, files.artistsWithoutAlbums(store));
+  if (req.method === 'POST' && (x = m(/^\/api\/artist\/(\d+)\/fold$/))) { const r = files.foldArtist(store, Number(x[1])); summaryCache = null; return send(res, 200, r); }
+  if (req.method === 'POST' && (x = m(/^\/api\/artist\/(\d+)\/rename$/))) { files.renameArtist(store, Number(x[1]), (await readJson(req)).name); summaryCache = null; return send(res, 200, { ok: true }); }
+  if (req.method === 'DELETE' && (x = m(/^\/api\/artist\/(\d+)$/))) { files.deleteArtist(store, Number(x[1])); summaryCache = null; return send(res, 200, { ok: true }); }
+  // file da una cartella del Mac
+  if (req.method === 'GET' && p === '/api/fs/list') return send(res, 200, files.listDir(store, url.searchParams.get('dir')));
+  if (req.method === 'POST' && (x = m(/^\/api\/album\/(\d+)\/add-from-path$/))) {
+    const b = await readJson(req);
+    const r = await files.addFromPath(store, Number(x[1]), b.path, { title: b.title, no: b.no, disc: b.disc }, !!b.move);
+    summaryCache = null;
+    return send(res, 200, r);
   }
 
   if (req.method === 'GET' && p === '/api/rescan') return send(res, 200, scan);

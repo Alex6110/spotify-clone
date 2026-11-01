@@ -271,4 +271,94 @@ async function addFile(store, albumId, tmpAbs, origName, slot) {
   return { relPath: destRel, durationMs: tags.durationMs, noTags: !!tags.noTags };
 }
 
-module.exports = { moveTrack, removeTrack, setTrackArtist, fileTitle, renamePlan, applyRename, addFile, musicRoot };
+// ---------- artisti: pulizia ----------
+/** Artisti senza nessun album: spesso frammenti di nomi ("AC" da "AC/DC") o ospiti di featuring. */
+function artistsWithoutAlbums(store) {
+  const rows = store.all(`SELECT a.id, a.name, a.photo, (SELECT count(*) FROM Track t WHERE t.artistId = a.id) AS tracks
+    FROM Artist a WHERE NOT EXISTS (SELECT 1 FROM Album al WHERE al.artistId = a.id) ORDER BY a.name COLLATE NOCASE`);
+  for (const r of rows) {
+    r.under = r.tracks ? store.all(`SELECT ar.id, ar.name, count(*) AS n FROM Track t JOIN Album al ON al.id = t.albumId JOIN Artist ar ON ar.id = al.artistId
+      WHERE t.artistId = ? GROUP BY ar.id ORDER BY n DESC LIMIT 4`, r.id) : [];
+    r.fragment = r.under.some((u) => T.sameArtistFamily(u.name, r.name));
+  }
+  return rows;
+}
+/** I brani tornano all'artista dell'album in cui stanno; se l'artista resta vuoto viene eliminato. */
+function foldArtist(store, artistId) {
+  if (!store.artist(artistId)) throw new Error('Artista inesistente');
+  store.backup();
+  return store.tx(() => {
+    const moved = store.run('UPDATE Track SET artistId = (SELECT al.artistId FROM Album al WHERE al.id = Track.albumId) WHERE artistId = ?', artistId).changes;
+    const left = store.get('SELECT (SELECT count(*) FROM Album WHERE artistId = ?) AS a, (SELECT count(*) FROM Track WHERE artistId = ?) AS t', artistId, artistId);
+    let removed = false;
+    if (!left.a && !left.t) { store.run('DELETE FROM Artist WHERE id = ?', artistId); removed = true; }
+    log(store, { op: 'fold-artist', artistId, moved: Number(moved), removed });
+    return { moved: Number(moved), removed };
+  });
+}
+function deleteArtist(store, artistId) {
+  const left = store.get('SELECT (SELECT count(*) FROM Album WHERE artistId = ?) AS a, (SELECT count(*) FROM Track WHERE artistId = ?) AS t', artistId, artistId);
+  if (left.a || left.t) throw new Error('L\'artista ha ancora album o brani: usa "Riporta i brani" oppure spostali prima');
+  store.backup();
+  store.run('DELETE FROM Artist WHERE id = ?', artistId);
+  log(store, { op: 'delete-artist', artistId });
+}
+/** Cambia il nome mostrato (la chiave di confronto resta uguale se cambia solo la punteggiatura, es. "AC:DC" -> "AC/DC"). */
+function renameArtist(store, artistId, name) {
+  const clean = T.cleanSpaces(name);
+  if (!clean) throw new Error('Scrivi il nome');
+  const key = T.normKey(clean);
+  const other = store.get('SELECT id, name FROM Artist WHERE key = ? AND id != ?', key, artistId);
+  if (other) throw new Error(`Esiste già un artista "${other.name}" con questo nome: unisci invece i due artisti spostando i brani`);
+  store.backup();
+  store.run('UPDATE Artist SET name = ?, key = ? WHERE id = ?', clean, key, artistId);
+  log(store, { op: 'rename-artist', artistId, name: clean });
+}
+
+// ---------- file da una cartella del Mac (spostati, non solo copiati) ----------
+const os = require('os');
+function expand(p) { return path.resolve(String(p || '').trim().replace(/^~(?=\/|$)/, os.homedir())); }
+function allowedSource(abs) {
+  const extra = (process.env.CURATOR_ALLOW || '').split(':').filter(Boolean);
+  return [os.homedir(), '/Volumes', ...extra].some((r) => abs === r || abs.startsWith(r + path.sep));
+}
+function listDir(store, dir) {
+  const abs = expand(dir);
+  if (!allowedSource(abs)) throw new Error('Per sicurezza posso leggere solo cartelle nella tua cartella utente o nei dischi collegati (/Volumes)');
+  const root = store.paths.musicDir;
+  if (root && (abs === root || abs.startsWith(root + path.sep))) throw new Error('Questa è la cartella della libreria: scegli una cartella con i file nuovi');
+  let st; try { st = fs.statSync(abs); } catch { throw new Error('Cartella non trovata'); }
+  if (!st.isDirectory()) throw new Error('Non è una cartella');
+  const out = [];
+  const walk = (d, depth) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (e.name.startsWith('.')) continue;
+      const full = path.join(d, e.name);
+      if (e.isDirectory() && depth < 2) walk(full, depth + 1);
+      else if (e.isFile() && T.isAudioFile(e.name) && out.length < 400) out.push({ path: full, name: e.name, rel: path.relative(abs, full), size: fs.statSync(full).size });
+    }
+  };
+  walk(abs, 0);
+  out.sort((a, b) => a.rel.localeCompare(b.rel, 'it', { numeric: true }));
+  return { dir: abs, files: out };
+}
+/** Copia il file nella libreria col nome giusto e, se move=true, cancella l'originale solo dopo che tutto è andato a buon fine. */
+async function addFromPath(store, albumId, srcPath, slot, move) {
+  const root = musicRoot(store);
+  const src = expand(srcPath);
+  if (!allowedSource(src) || src.startsWith(root + path.sep)) throw new Error('File non consentito');
+  const st = fs.statSync(src);
+  if (!st.isFile() || !T.isAudioFile(src)) throw new Error('Non è un file audio');
+  const tmpDir = path.join(root, '.incoming');
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const tmp = path.join(tmpDir, `curator-${Date.now()}-${Math.random().toString(36).slice(2)}.part`);
+  fs.copyFileSync(src, tmp);
+  if (fs.statSync(tmp).size !== st.size) { fs.rmSync(tmp, { force: true }); throw new Error('Copia incompleta, originale non toccato'); }
+  let r;
+  try { r = await addFile(store, albumId, tmp, path.basename(src), slot); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+  let moved = false;
+  if (move) { try { fs.unlinkSync(src); moved = true; log(store, { op: 'move-source', from: src, to: r.relPath }); } catch { /* resta anche l'originale */ } }
+  return { ...r, moved };
+}
+
+module.exports = { artistsWithoutAlbums, foldArtist, deleteArtist, renameArtist, listDir, addFromPath, moveTrack, removeTrack, setTrackArtist, fileTitle, renamePlan, applyRename, addFile, musicRoot };
