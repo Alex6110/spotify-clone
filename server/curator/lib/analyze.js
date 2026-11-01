@@ -63,7 +63,7 @@ class Analyzer {
       ref: ref.id ? { id: ref.id, manual: !!ref.manual, info: ref.info } : null,
       candidates: ref.candidates,
       cached: !!refAlbums,
-      albums: [], missing: [], stats: { zeros: 0, durationIssues: 0, coverIssues: 0, missingAlbums: 0, missingTracks: 0 },
+      albums: [], missing: [], stats: { zeros: 0, durationIssues: 0, orderIssues: 0, coverIssues: 0, missingAlbums: 0, missingTracks: 0 },
     };
     const overrides = {};
     for (const o of owned) { const s = this.store.albumState(o.id); if (s.ref != null) overrides[o.id] = s.ref; }
@@ -82,13 +82,17 @@ class Analyzer {
           const tm = M.matchTracks(ours, refTracks);
           const pairs = tm.pairs.map((p) => {
             const d = p.ours.durationMs > 0 ? M.durationDiff(p.ours.durationMs, p.ref.d, thr) : { diff: null, bad: false };
-            return { id: p.ours.id, title: p.ours.title, ms: p.ours.durationMs, refTitle: p.ref.t, refSec: p.ref.d, diff: d.diff, bad: d.bad, zero: p.ours.durationMs === 0, relPath: p.ours.relPath };
+            return { id: p.ours.id, title: p.ours.title, ms: p.ours.durationMs, refTitle: p.ref.t, refSec: p.ref.d, diff: d.diff, bad: d.bad, zero: p.ours.durationMs === 0, relPath: p.ours.relPath, refNo: p.ref.p, refDisc: p.ref.disc, ourNo: p.ours.trackNo, ourDisc: p.ours.discNo };
           });
           row.tracks = {
-            ref: refTracks.length, pairs,
+            ref: refTracks.length, multiDisc: refTracks.some((r) => r.disc > 1), pairs,
             extra: tm.extra.map((t) => ({ id: t.id, title: t.title, ms: t.durationMs })),
             missing: tm.missing.map((t) => ({ title: t.t, sec: t.d, no: t.p, disc: t.disc })),
           };
+          const multi = refTracks.some((r) => r.disc > 1);
+          for (const p of pairs) p.orderBad = p.ourNo !== p.refNo || (multi && (p.ourDisc || 1) !== p.refDisc);
+          row.orderIssues = pairs.filter((p) => p.orderBad).length;
+          result.stats.orderIssues = (result.stats.orderIssues || 0) + row.orderIssues;
           result.stats.durationIssues += pairs.filter((p) => p.bad).length;
           result.stats.missingTracks += tm.missing.length;
         }

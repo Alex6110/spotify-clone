@@ -78,6 +78,13 @@ class Store {
     this.saveState();
   }
 
+  /** Titolo/numeri scelti a mano: la scansione li preferisce ai tag (che nei file restano com'erano). Chiave = percorso del file. */
+  moveOverride(oldRel, newRel, value) {
+    const ov = this.state.overrides || (this.state.overrides = {});
+    if (oldRel) delete ov[oldRel];
+    ov[newRel] = { ...(ov[newRel] || {}), ...value };
+    this.saveState();
+  }
   run(sql, ...args) { return this.db.prepare(sql).run(...args); }
   tx(fn) {
     this.db.exec('BEGIN');

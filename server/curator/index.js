@@ -105,6 +105,28 @@ async function applyArtistPhoto(artistId, buf) {
   return value;
 }
 
+
+function receiveToFile(req, dest, limit) {
+  return new Promise((resolve, reject) => {
+    const out = fs.createWriteStream(dest); let size = 0; let failed = false;
+    const fail = (e) => { if (failed) return; failed = true; out.destroy(); reject(e); };
+    req.on('data', (c) => { size += c.length; if (size > limit) { fail(new Error('File troppo grande')); req.destroy(); } });
+    req.on('error', fail); out.on('error', fail);
+    out.on('finish', () => (failed ? null : resolve(size)));
+    req.pipe(out);
+  });
+}
+
+/** Proposta di nomi corretti per i brani di un album (serve l'album di riferimento già scaricato). */
+async function renamePlanFor(albumId) {
+  const al = store.get('SELECT id, title, artistId FROM Album WHERE id = ?', albumId);
+  if (!al) throw new Error('Album inesistente');
+  const r = await an.artist(al.artistId, { network: true });
+  const row = r.albums.find((a) => a.id === albumId);
+  if (!row || !row.tracks) return { album: al.title, ref: row?.ref?.title || null, items: [], error: 'Questo album non è abbinato a un album della discografia: scegli prima il riferimento.' };
+  return { album: al.title, ref: row.ref.title, items: files.renamePlan(store, row.tracks.pairs, row.tracks.multiDisc) };
+}
+
 async function route(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const p = decodeURIComponent(url.pathname);
@@ -194,6 +216,29 @@ async function route(req, res) {
   if (req.method === 'POST' && (x = m(/^\/api\/track\/(\d+)\/artist$/))) {
     const b = await readJson(req);
     return send(res, 200, files.setTrackArtist(store, Number(x[1]), b.name));
+  }
+
+  // nomi dei file secondo la discografia
+  if (req.method === 'GET' && (x = m(/^\/api\/album\/(\d+)\/rename-plan$/))) return send(res, 200, await renamePlanFor(Number(x[1])));
+  if (req.method === 'POST' && (x = m(/^\/api\/album\/(\d+)\/rename$/))) {
+    const b = await readJson(req);
+    const plan = await renamePlanFor(Number(x[1]));
+    const r = files.applyRename(store, plan.items, b.trackIds || []);
+    summaryCache = null;
+    return send(res, 200, r);
+  }
+  // nuovo brano da un file qualsiasi del computer: il corpo della richiesta è il file stesso
+  if (req.method === 'PUT' && (x = m(/^\/api\/album\/(\d+)\/add$/))) {
+    const root = files.musicRoot(store);
+    const tmpDir = path.join(root, '.incoming');
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const tmp = path.join(tmpDir, `curator-${Date.now()}-${Math.random().toString(36).slice(2)}.part`);
+    try {
+      await receiveToFile(req, tmp, 1024 * 1024 * 1024);
+      const r = await files.addFile(store, Number(x[1]), tmp, url.searchParams.get('name') || '', { title: url.searchParams.get('title'), no: url.searchParams.get('no'), disc: url.searchParams.get('disc') });
+      summaryCache = null;
+      return send(res, 200, r);
+    } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
   }
 
   if (req.method === 'GET' && p === '/api/rescan') return send(res, 200, scan);

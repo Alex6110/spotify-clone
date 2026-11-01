@@ -6,7 +6,7 @@ const express = require('express');
 const prisma = require('../db');
 const config = require('../config');
 const { requireAuth } = require('../auth');
-const { safeJoin, safeFileName, trackFileName } = require('../lib/text');
+const { safeJoin, safeFileName, trackFileName, sortTracks } = require('../lib/text');
 const { zipStream, zipSize, MAX_ZIP_BYTES } = require('../lib/zip');
 
 const router = express.Router();
@@ -62,6 +62,7 @@ router.get('/album/:id', async (req, res) => {
     select: { id: true, title: true, artist: { select: { name: true } }, tracks: { orderBy: [{ discNo: 'asc' }, { trackNo: 'asc' }, { title: 'asc' }], select: trackSel } },
   });
   if (!album) return res.status(404).json({ error: 'Album non trovato' });
+  album.tracks = sortTracks(album.tracks);
 
   const folder = safeFileName(`${album.artist.name} - ${album.title}`) || 'Album';
   const multiDisc = album.tracks.some((t) => (t.discNo || 1) > 1);

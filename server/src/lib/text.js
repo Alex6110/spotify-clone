@@ -137,7 +137,20 @@ function sameArtistFamily(a, b) {
   return long.startsWith(`${short} `) || long.endsWith(` ${short}`) || long.includes(` ${short} `);
 }
 
+/**
+ * Ordine dei brani di un album: disco, numero di traccia, titolo. Fatto in JavaScript perché nel database
+ * "nessun disco" (NULL) verrebbe prima del disco 1 e un brano senza numero di disco finirebbe in cima.
+ */
+function sortTracks(tracks) {
+  return [...tracks].sort((a, b) => (
+    (a.discNo || 1) - (b.discNo || 1)
+    || (a.trackNo ?? 9999) - (b.trackNo ?? 9999)
+    || String(a.titleKey || a.title || '').localeCompare(String(b.titleKey || b.title || ''))
+  ));
+}
+
 module.exports = {
+  sortTracks,
   sameArtistFamily,
   safeFileName, trackFileName,
   legacySlug,

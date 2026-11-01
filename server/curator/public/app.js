@@ -31,9 +31,9 @@ const busy = async (btn, fn) => {
   btn.disabled = true;
   try { await fn(); } catch (e) { toast(e.message, true); } finally { btn.disabled = false; }
 };
-function pickFile(accept, cb) {
-  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = accept;
-  inp.onchange = () => { if (inp.files[0]) cb(inp.files[0]); };
+function pickFile(accept, cb, multiple) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = accept; inp.multiple = !!multiple;
+  inp.onchange = () => { if (inp.files[0]) cb(multiple ? [...inp.files] : inp.files[0]); };
   inp.click();
 }
 
@@ -188,6 +188,7 @@ async function pageArtist(id) {
     if (t) {
       const bad = t.pairs.filter((p) => p.bad).length;
       if (bad) badges.push(`<span class="badge warn">${bad} durate</span>`);
+      if (al.orderIssues) badges.push(`<span class="badge warn">${al.orderIssues} fuori ordine</span>`);
       if (t.missing.length) badges.push(`<span class="badge warn">${t.missing.length} brani mancanti</span>`);
     }
     if (!ref && r.cached) badges.push('<span class="badge warn">nessun abbinamento</span>');
@@ -213,10 +214,14 @@ async function pageArtist(id) {
       ${ref && ref.cover ? '<button class="btn small" data-act="usecover">Usa la copertina di Deezer</button>' : ''}
       <button class="btn small" data-act="upcover">${ic('up')} Carica copertina</button>
       <button class="btn small ${al.state.confirmed ? 'ok' : ''}" data-act="confirm">${ic('check')} ${al.state.confirmed ? 'Controllato' : 'Segna controllato'}</button>
-      <select data-act="link" style="max-width:340px">${opts.join('')}</select></div>`;
+      <select data-act="link" style="max-width:340px">${opts.join('')}</select></div>
+    <div class="bar">
+      ${t ? '<button class="btn small" data-act="plan">Nomi e ordine secondo Deezer…</button>' : ''}
+      <button class="btn small" data-act="addfiles">${ic('plus')} Aggiungi file dal computer…</button></div>
+    <div data-panel></div>`;
     if (t) {
       h += `<table><thead><tr><th>Nel tuo archivio</th><th class="num">Durata</th><th>Su Deezer</th><th class="num">Durata</th><th class="num">Differenza</th><th></th></tr></thead><tbody>
-        ${t.pairs.map((p) => `<tr><td>${esc(p.title)}</td><td class="num ${p.zero ? 'bad-t' : ''}">${p.zero ? '0:00' : dur(p.ms)}</td><td class="dim">${esc(p.refTitle)}</td><td class="num">${mmss(p.refSec)}</td>
+        ${t.pairs.map((p) => `<tr><td><span class="${p.orderBad ? 'warn-t' : 'dim'}" title="${p.orderBad ? `numero attuale ${p.ourNo ?? '—'}, nella discografia ${p.refNo}` : ''}">${p.ourNo ?? '—'}.</span> ${esc(p.title)}</td><td class="num ${p.zero ? 'bad-t' : ''}">${p.zero ? '0:00' : dur(p.ms)}</td><td class="dim">${esc(p.refTitle)}</td><td class="num">${mmss(p.refSec)}</td>
           <td class="num ${p.bad ? 'bad-t' : 'dim'}">${p.diff == null ? '—' : `${p.diff > 0 ? '+' : ''}${p.diff} s`}</td>${trackActions(p.id, al.id)}</tr>`).join('')}
         ${t.extra.map((p) => `<tr><td>${esc(p.title)}</td><td class="num">${dur(p.ms)}</td><td class="warn-t" colspan="3">non presente nell'album di riferimento</td>${trackActions(p.id, al.id)}</tr>`).join('')}
         ${t.missing.map((p) => `<tr><td class="warn-t" colspan="2">mancante</td><td class="dim">${p.disc > 1 ? `${p.disc}-` : ''}${p.no}. ${esc(p.title)}</td><td class="num">${mmss(p.sec)}</td><td></td><td></td></tr>`).join('')}
@@ -226,6 +231,62 @@ async function pageArtist(id) {
     }
     h += `<div class="bar"><input type="search" data-act="tsearch" placeholder="Aggiungi a questo album un brano già presente nell'archivio: cerca titolo o artista…" style="width:min(520px,100%)"></div><div data-tres></div>`;
     return h;
+  }
+  const base = (rel) => rel.split('/').pop();
+  async function showPlan(al, panel) {
+    const pl = await api(`/api/album/${al.id}/rename-plan`);
+    if (pl.error) { panel.innerHTML = `<div class="note">${esc(pl.error)}</div>`; return; }
+    const todo = pl.items.filter((i) => !i.same || i.dbOnly);
+    panel.innerHTML = `<div class="card" style="margin:10px 0"><b>Nomi secondo "${esc(pl.ref)}"</b>
+      <p class="dim" style="margin:4px 0 8px">${todo.length ? `${todo.length} brani da sistemare (nome o numero), ${pl.items.length - todo.length} già corretti.` : 'Tutti i file hanno già il nome corretto.'} Mi piace e playlist restano al loro posto.</p>
+      ${todo.length ? `<table><thead><tr><th></th><th>Ora</th><th>Dopo</th></tr></thead><tbody>${todo.map((i) => `<tr><td><input type="checkbox" data-pid="${i.trackId}" ${i.conflict ? 'disabled' : 'checked'}></td>
+        <td class="dim">${esc(base(i.from))}</td><td>${i.dbOnly ? `${esc(base(i.to))} <span class="badge warn">solo numero: ${i.curNo ?? '—'} → ${i.trackNo}</span>` : esc(base(i.to))}${i.conflict ? ` <span class="badge bad">${esc(i.conflict)}</span>` : ''}</td></tr>`).join('')}</tbody></table>
+        <div class="bar"><button class="btn primary small" data-act="doplan">Applica i nomi selezionati</button></div>` : ''}</div>`;
+  }
+  async function applyPlan(al, box) {
+    const ids = [...box.querySelectorAll('[data-pid]:checked')].map((c) => Number(c.dataset.pid));
+    if (!ids.length) return toast('Nessun file selezionato', true);
+    if (!confirm(`Rinominare ${ids.length} file sul disco?`)) return;
+    const r = await post(`/api/album/${al.id}/rename`, { trackIds: ids });
+    toast(`${r.done.length} file rinominati${r.skipped.length ? `, ${r.skipped.length} saltati` : ''}`);
+    await reload();
+  }
+  const guess = (name) => {
+    const stem = name.replace(/\.[^.]+$/, '');
+    const m = /^(?:(\d{1,2})-)?(\d{1,3})\s*[-._)]?\s+(.+)$/.exec(stem);
+    return { no: m ? Number(m[2]) : '', disc: m && m[1] ? Number(m[1]) : '', title: (m ? m[3] : stem).trim() };
+  };
+  const nk = (t) => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '');
+  function showAdd(al, fl, panel) {
+    const slots = al.tracks ? al.tracks.missing : [];
+    const used = new Set();
+    panel._files = fl;
+    panel.innerHTML = `<div class="card" style="margin:10px 0"><b>Aggiungi ${fl.length} file a "${esc(al.title)}"</b>
+      <p class="dim" style="margin:4px 0 8px">Scegli a quale brano della discografia corrisponde ogni file: verrà copiato nella cartella dell'album col nome giusto. Il file originale resta dov'è.</p>
+      <table><thead><tr><th>File</th><th>Brano</th><th>Titolo (se a mano)</th><th>N.</th></tr></thead><tbody>${fl.map((f, i) => {
+        const g = guess(f.name);
+        let pick = slots.findIndex((sl, k) => !used.has(k) && (nk(sl.title) === nk(g.title) || (nk(g.title).length > 3 && (nk(sl.title).includes(nk(g.title)) || nk(g.title).includes(nk(sl.title))))));
+        if (pick >= 0) used.add(pick);
+        return `<tr data-i="${i}"><td>${esc(f.name)}</td>
+          <td><select data-slot><option value="-1">A mano…</option>${slots.map((sl, k) => `<option value="${k}" ${k === pick ? 'selected' : ''}>${sl.disc > 1 ? `${sl.disc}-` : ''}${sl.no}. ${esc(sl.title)}</option>`).join('')}</select></td>
+          <td><input type="search" data-title value="${esc(g.title)}" style="width:200px"></td><td><input type="number" data-no value="${g.no}" style="width:64px"></td></tr>`;
+      }).join('')}</tbody></table>
+      <div class="bar"><button class="btn primary small" data-act="doadd">Carica ${fl.length} file</button></div></div>`;
+  }
+  async function applyAdd(al, box) {
+    const panel = $('[data-panel]', box); const fl = panel._files; const slots = al.tracks ? al.tracks.missing : [];
+    let ok = 0; const errs = [];
+    for (const tr of panel.querySelectorAll('tr[data-i]')) {
+      const f = fl[Number(tr.dataset.i)]; const k = Number($('[data-slot]', tr).value);
+      const sl = k >= 0 ? slots[k] : { title: $('[data-title]', tr).value.trim(), no: Number($('[data-no]', tr).value) || '', disc: 1 };
+      if (!sl.title) { errs.push(`${f.name}: manca il titolo`); continue; }
+      try {
+        await api(`/api/album/${al.id}/add?name=${encodeURIComponent(f.name)}&title=${encodeURIComponent(sl.title)}&no=${sl.no || ''}&disc=${sl.disc || ''}`, { method: 'PUT', body: f });
+        ok += 1;
+      } catch (e) { errs.push(`${f.name}: ${e.message}`); }
+    }
+    toast(`${ok} file aggiunti${errs.length ? ` · ${errs.length} errori: ${errs[0]}` : ''}`, errs.length > 0);
+    if (ok) await reload();
   }
   const bindAlbums = () => {
     tab.onclick = async (e) => {
@@ -242,6 +303,10 @@ async function pageArtist(id) {
         if (!name) return;
         return busy(b, async () => { await post(`/api/track/${b.dataset.track}/artist`, { name }); toast('Artista del brano aggiornato'); await reload(); });
       }
+      if (b.dataset.act === 'plan') return busy(b, async () => showPlan(al, $('[data-panel]', box)));
+      if (b.dataset.act === 'addfiles') return pickFile('audio/*,.mp3,.flac,.m4a,.aac,.ogg,.opus,.wav', (fl) => showAdd(al, fl, $('[data-panel]', box)), true);
+      if (b.dataset.act === 'doplan') return busy(b, () => applyPlan(al, box));
+      if (b.dataset.act === 'doadd') return busy(b, () => applyAdd(al, box));
       if (b.dataset.act === 'bring') return busy(b, async () => { await post(`/api/track/${b.dataset.track}/move`, { albumId: al.id }); toast('Brano spostato qui'); await reload(); });
       if (b.dataset.act === 'toggle') {
         const d = $('.detail', box);

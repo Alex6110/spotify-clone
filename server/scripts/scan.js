@@ -20,9 +20,12 @@ const FORCE = args.has('--force');
 const NO_COVERS = args.has('--no-covers');
 // Copertine scelte a mano nello strumento di controllo (npm run curator): la scansione non deve sostituirle.
 let LOCKED_COVERS = new Set();
+// Titoli/numeri corretti a mano nello strumento di controllo (chiave = percorso del file): prevalgono sui tag, che nei file restano com'erano.
+let OVERRIDES = {};
 try {
   const st = JSON.parse(require('fs').readFileSync(require('path').join(config.dataDir, 'curator-state.json'), 'utf8'));
   LOCKED_COVERS = new Set(Object.entries(st.albums || {}).filter(([, v]) => v && v.coverLocked).map(([k]) => Number(k)));
+  OVERRIDES = st.overrides || {};
 } catch { /* nessuna scelta manuale */ }
 
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp']);
@@ -186,15 +189,16 @@ async function main() {
     for (const { f, md } of parsed) {
       const c = md?.common;
       const fromName = T.parseTrackFile(f.info.fileName);
-      const title = T.cleanSpaces(c?.title) || fromName.title;
-      const tagArtist = T.cleanSpaces(c?.artist || '');
+      const ov = OVERRIDES[f.rel] || OVERRIDES[f.rel.normalize('NFC')] || {};
+      const title = T.cleanSpaces(ov.title) || T.cleanSpaces(c?.title) || fromName.title;
+      const tagArtist = ov.keepAlbumArtist ? '' : T.cleanSpaces(c?.artist || '');
       // "Zucchero Feat. Eric Clapton" resta di Zucchero; un artista davvero diverso (compilation) ha il suo
       const trackArtistId = tagArtist && !T.sameArtistFamily(tagArtist, albumArtistName) ? await artistId(tagArtist) : aId;
       const data = {
         title,
         titleKey: T.normKey(title),
-        trackNo: c?.track?.no || fromName.trackNo || null,
-        discNo: c?.disk?.no || f.info.discNo || fromName.discNo || null,
+        trackNo: ov.trackNo || c?.track?.no || fromName.trackNo || null,
+        discNo: ov.discNo || c?.disk?.no || f.info.discNo || fromName.discNo || null,
         durationMs: md?.format?.duration ? Math.round(md.format.duration * 1000) : 0,
         format: path.extname(f.rel).slice(1).toLowerCase(),
         bitrate: md?.format?.bitrate ? Math.round(md.format.bitrate / 1000) : null,

@@ -100,6 +100,7 @@ function moveTrack(store, trackId, target) {
       // se il brano "apparteneva" all'artista del vecchio album segue il nuovo; un featuring resta com'è
       const newArtistId = t.artistId === t.albumArtistId ? album.artistId : t.artistId;
       store.run('UPDATE Track SET relPath = ?, albumId = ?, artistId = ? WHERE id = ?', finalRel, albumId, newArtistId, t.id);
+      if (store.state.overrides && store.state.overrides[t.relPath]) store.moveOverride(t.relPath, finalRel, store.state.overrides[t.relPath]);
       dropAlbumIfEmpty(store, t.albumId);
       album.id = albumId;
     });
@@ -152,4 +153,122 @@ function setTrackArtist(store, trackId, name) {
   });
 }
 
-module.exports = { moveTrack, removeTrack, setTrackArtist };
+
+// ---------- nomi dei file secondo la discografia ----------
+/** Titolo per il nome del file: toglie le code di Deezer tipo " - Remastered 2011" o "(2011 Remaster)". */
+function fileTitle(t) {
+  return T.cleanSpaces(String(t || '').replace(/\s*[-–]\s*(\d{4}\s+)?remaster(ed)?(\s+\d{4})?.*$/i, '').replace(/\s*[\[(]\s*(\d{4}\s+)?remaster(ed)?(\s+\d{4})?\s*[\])]/gi, ''));
+}
+
+/**
+ * Piano di ridenominazione: per ogni brano abbinato a uno della discografia, il nome "NN - Titolo.ext" corretto.
+ * pairs: [{ id, relPath, refTitle, refNo, refDisc }], multiDisc: l'album ha più dischi.
+ * Non tocca nulla: restituisce solo la proposta, con i conflitti segnalati.
+ */
+function renamePlan(store, pairs, multiDisc) {
+  const root = musicRoot(store);
+  const items = pairs.map((p) => {
+    const title = fileTitle(p.refTitle);
+    const ext = path.extname(p.relPath).slice(1);
+    const dir = path.posix.dirname(p.relPath);
+    const fileName = T.trackFileName({ title, trackNo: p.refNo || null, discNo: multiDisc ? p.refDisc : null, ext });
+    const to = nfc(`${dir}/${fileName}`);
+    return { trackId: p.id, from: p.relPath, to, title, trackNo: p.refNo || null, discNo: multiDisc ? p.refDisc : null, same: nfc(p.relPath) === to, conflict: null, curNo: p.ourNo ?? null, curDisc: p.ourDisc ?? null };
+  });
+  for (const it of items) it.dbOnly = it.same && (it.curNo !== it.trackNo || (multiDisc && (it.curDisc || 1) !== it.discNo));
+  const count = new Map();
+  for (const it of items) count.set(it.to.toLowerCase(), (count.get(it.to.toLowerCase()) || 0) + 1);
+  const mine = new Set(items.map((i) => i.trackId));
+  for (const it of items) {
+    if (it.same) continue;
+    if (count.get(it.to.toLowerCase()) > 1) it.conflict = 'due brani avrebbero lo stesso nome';
+    else {
+      const other = store.get('SELECT id FROM Track WHERE relPath = ? AND id != ?', it.to, it.trackId);
+      const onDisk = locate(root, it.to);
+      const fromAbs = locate(root, it.from);
+      if (other && !mine.has(other.id)) it.conflict = 'esiste già un altro brano con questo nome';
+      else if (onDisk && fromAbs && path.resolve(onDisk).toLowerCase() !== path.resolve(fromAbs).toLowerCase()) it.conflict = 'esiste già un file con questo nome';
+      else if (!fromAbs) it.conflict = 'il file non esiste sul disco';
+    }
+  }
+  return items;
+}
+
+/** Applica le ridenominazioni scelte: file sul disco + percorso/titolo/numeri nel database (l'ID resta lo stesso, quindi Mi piace e playlist sopravvivono). */
+function applyRename(store, plan, onlyIds) {
+  const root = musicRoot(store);
+  const want = new Set(onlyIds.map(Number));
+  const done = []; const skipped = [];
+  store.backup();
+  for (const it of plan) {
+    if (!want.has(it.trackId)) continue;
+    if (it.conflict || (it.same && !it.dbOnly)) { skipped.push({ trackId: it.trackId, why: it.conflict || 'già corretto' }); continue; }
+    const t = store.track(it.trackId);
+    if (it.same) { // il nome del file è giusto: correggo solo numero di traccia e disco
+      store.run('UPDATE Track SET title = ?, titleKey = ?, trackNo = ?, discNo = COALESCE(?, discNo) WHERE id = ?', it.title, T.normKey(it.title), it.trackNo, it.discNo, it.trackId);
+      store.moveOverride(t.relPath, t.relPath, { title: it.title, trackNo: it.trackNo, ...(it.discNo ? { discNo: it.discNo } : {}) });
+      log(store, { op: 'renumber', trackId: it.trackId, trackNo: it.trackNo });
+      done.push(it.trackId);
+      continue;
+    }
+    const src = t && locate(root, t.relPath);
+    if (!src) { skipped.push({ trackId: it.trackId, why: 'file non trovato' }); continue; }
+    const dest = path.join(root, it.to);
+    if (!dest.startsWith(root + path.sep)) { skipped.push({ trackId: it.trackId, why: 'percorso non valido' }); continue; }
+    try {
+      fs.renameSync(src, dest);
+      try {
+        store.run('UPDATE Track SET relPath = ?, title = ?, titleKey = ?, trackNo = ?, discNo = COALESCE(?, discNo) WHERE id = ?', it.to, it.title, T.normKey(it.title), it.trackNo, it.discNo, it.trackId);
+      } catch (e) { fs.renameSync(dest, src); throw e; }
+      store.moveOverride(t.relPath, it.to, { title: it.title, trackNo: it.trackNo, ...(it.discNo ? { discNo: it.discNo } : {}) });
+      log(store, { op: 'rename', trackId: it.trackId, from: t.relPath, to: it.to });
+      done.push(it.trackId);
+    } catch (e) { skipped.push({ trackId: it.trackId, why: e.message }); }
+  }
+  return { done, skipped };
+}
+
+// ---------- nuovi file dal computer ----------
+let mm = null;
+async function readTags(file) {
+  try {
+    mm = mm || await import('music-metadata');
+    const md = await mm.parseFile(file, { duration: true });
+    return { durationMs: md.format?.duration ? Math.round(md.format.duration * 1000) : 0, bitrate: md.format?.bitrate ? Math.round(md.format.bitrate / 1000) : null };
+  } catch { return { durationMs: 0, bitrate: null, noTags: true }; }
+}
+
+/** Mette un file (già copiato in una cartella temporanea dentro MUSIC_DIR) in un album col nome giusto e lo registra nel database. */
+async function addFile(store, albumId, tmpAbs, origName, slot) {
+  const root = musicRoot(store);
+  const ext = path.extname(origName || '').toLowerCase();
+  if (!T.isAudioFile(`x${ext}`)) throw new Error(`Formato non supportato (${ext || 'senza estensione'}): usa mp3, flac, m4a, aac, ogg, opus o wav`);
+  const album = store.get('SELECT * FROM Album WHERE id = ?', albumId);
+  if (!album) throw new Error('Album inesistente');
+  const artist = store.get('SELECT id, name FROM Artist WHERE id = ?', album.artistId);
+  const title = fileTitle(slot.title) || T.cleanSpaces(path.parse(origName).name);
+  const trackNo = Number(slot.no) || null;
+  const discNo = Number(slot.disc) > 1 ? Number(slot.disc) : null; // nel nome del file solo dal disco 2
+  const dbDisc = discNo || 1;
+  const dir = destDirFor(store, album, artist, -1);
+  const fileName = T.trackFileName({ title, trackNo, discNo, ext });
+  const destRel = nfc(`${dir}/${fileName}`);
+  if (store.get('SELECT id FROM Track WHERE relPath = ?', destRel)) throw new Error(`Esiste già un brano con questo nome: ${destRel}`);
+  const destAbs = path.join(root, destRel);
+  if (!destAbs.startsWith(root + path.sep)) throw new Error('Percorso di destinazione non valido');
+  if (fs.existsSync(destAbs)) throw new Error(`Esiste già un file con questo nome: ${destRel}`);
+  fs.mkdirSync(path.dirname(destAbs), { recursive: true });
+  fs.renameSync(tmpAbs, destAbs);
+  const st = fs.statSync(destAbs);
+  const tags = await readTags(destAbs);
+  store.backup();
+  try {
+    store.run(`INSERT INTO Track (title, titleKey, relPath, trackNo, discNo, durationMs, format, bitrate, size, mtimeMs, albumId, artistId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      title, T.normKey(title), destRel, trackNo, dbDisc, tags.durationMs, ext.slice(1), tags.bitrate, st.size, st.mtimeMs, albumId, album.artistId);
+  } catch (e) { try { fs.renameSync(destAbs, tmpAbs); } catch { /* il file resta nella cartella temporanea */ } throw e; }
+  store.moveOverride(null, destRel, { title, trackNo, ...(discNo ? { discNo } : {}) });
+  log(store, { op: 'add', albumId, to: destRel, original: origName });
+  return { relPath: destRel, durationMs: tags.durationMs, noTags: !!tags.noTags };
+}
+
+module.exports = { moveTrack, removeTrack, setTrackArtist, fileTitle, renamePlan, applyRename, addFile, musicRoot };

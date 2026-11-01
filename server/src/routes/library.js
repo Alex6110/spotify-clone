@@ -2,7 +2,7 @@ const express = require('express');
 const { z } = require('zod');
 const prisma = require('../db');
 const { requireAuth } = require('../auth');
-const { normKey } = require('../lib/text');
+const { normKey, sortTracks } = require('../lib/text');
 const { trackSelect, trackDto, albumSelect, albumDto } = require('../lib/dto');
 
 const router = express.Router();
@@ -75,6 +75,7 @@ router.get('/albums/:id', async (req, res) => {
     select: { ...albumSelect, tracks: { orderBy: trackOrder, select: trackSelect } },
   });
   if (!album) return res.status(404).json({ error: 'Album non trovato' });
+  album.tracks = sortTracks(album.tracks);
   const liked = await likedSet(req.userId, album.tracks.map((t) => t.id));
   res.json({ ...albumDto(album), tracks: album.tracks.map((t) => trackDto(t, liked.has(t.id))) });
 });
