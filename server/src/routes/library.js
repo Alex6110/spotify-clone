@@ -173,6 +173,20 @@ router.get('/tracks', async (req, res) => {
   res.json({ items: ids.map((id) => byId.get(id)).filter(Boolean).map((t) => trackDto(t, liked.has(t.id))) });
 });
 
+// ---- Brani ascoltati di recente (senza doppioni, i più recenti per primi) ----
+router.get('/recent', async (req, res) => {
+  const rows = await prisma.listen.findMany({
+    where: { userId: req.userId }, orderBy: { at: 'desc' }, take: 300, select: { trackId: true },
+  });
+  const ids = [];
+  for (const r of rows) { if (!ids.includes(r.trackId)) ids.push(r.trackId); if (ids.length === 60) break; }
+  if (!ids.length) return res.json({ items: [] });
+  const tracks = await prisma.track.findMany({ where: { id: { in: ids } }, select: trackSelect });
+  const byId = new Map(tracks.map((t) => [t.id, t]));
+  const liked = await likedSet(req.userId, ids);
+  res.json({ items: ids.map((id) => byId.get(id)).filter(Boolean).map((t) => trackDto(t, liked.has(t.id))) });
+});
+
 // ---- Preferiti ----
 router.get('/likes', async (req, res) => {
   const { limit, offset } = page(req, 200, 100);

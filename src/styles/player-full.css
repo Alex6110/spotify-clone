@@ -1,271 +1,89 @@
-/* --- FULL PLAYER MOBILE OVERLAY --- */
+/* --- PLAYER A TUTTO SCHERMO (mobile) --- */
 .full-player-overlay {
   position: fixed;
   inset: 0;
   z-index: 2000;
   display: flex;
   flex-direction: column;
-  justify-content: space-between; 
-  align-items: center;
-  /* Padding dinamico: si adatta tra 20px (schermi piccoli) e 60px (schermi grandi) */
-  padding: calc(clamp(20px, 5vh, 60px) + env(safe-area-inset-top)) 25px 
-           calc(clamp(20px, 5vh, 60px) + env(safe-area-inset-bottom)) 25px;
-  color: white;
-  pointer-events: auto;
+  align-items: stretch;
+  padding: calc(var(--safe-top) + 8px) 24px calc(var(--safe-bottom) + 14px);
+  color: #fff;
   background-color: #121212;
-  box-sizing: border-box; 
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
-@media (max-height: 700px) {
-  .full-player-overlay {
-    justify-content: space-between; /* Forza gli elementi verso i bordi */
-    gap: 10px; 
-    padding: calc(10px + env(safe-area-inset-top)) 20px 15px 20px;
-  }
-}
-
+/* barra in alto: freccia | titolo | menu "..." */
 .full-player-header {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
+  flex: none;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
   align-items: center;
-  height: 45px;
-  flex-shrink: 0;
-  margin: 0; /* Reset margini */
+  height: 48px;
+  margin: 0 -8px;
 }
+.header-status { text-align: center; font-size: 14px; font-weight: 700; letter-spacing: .01em; }
+.fp-icon-btn { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; color: #fff; justify-self: center; }
 
-@media (max-height: 700px) {
-  .full-player-header {
-    height: 35px !important; /* Da 45px a 35px */
-  }
-}
-
-.header-status {
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* AREA COPERTINA */
+/* copertina: quadrata, grande quanto lo spazio permette */
 .full-player-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  container-type: size;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  flex: 3; /* Peso dominante per schermi grandi */
-  margin-bottom: clamp(15px, 4vh, 30px); 
-  min-height: 0; 
+  padding: 0;
+  margin: 12px 0;
 }
-
 .full-cover-art {
-  width: 100%;
-  /* Usiamo vh per entrambi così il quadrato scala in base all'altezza disponibile */
-  max-width: 40vh; 
-  max-height: 40vh;
-  aspect-ratio: 1/1 !important; 
-  border-radius: 12px;
-  object-fit: contain; /* Garantisce che l'immagine non venga mai tagliata */
-  box-shadow: 0 15px 50px rgba(0,0,0,0.6);
-  flex-shrink: 1; /* Fondamentale per evitare collisioni */
+  width: min(100cqw, 100cqh);
+  height: min(100cqw, 100cqh);
+  border-radius: var(--border-radius-cards, 10px);
+  object-fit: cover;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55);
+  background: rgba(255, 255, 255, .06);
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
-/* OTTIMIZZAZIONE PER SCHERMI CORTI (es. iPhone SE o schermi piccoli) */
-@media (max-height: 700px) {
-  .full-player-main {
-    flex: 2; /* Permette alla cover di prendersi lo spazio centrale e spingere il resto */
-    margin-top: 5px;
-    margin-bottom: 10px;
-  }
-  .full-cover-art {
-    /* Leggermente più grande per riempire il vuoto */
-    max-width: 38vh !important; 
-    max-height: 38vh !important;
-  }
-}
+.full-player-controls-wrapper { flex: none; display: flex; flex-direction: column; width: 100%; }
 
-.full-player-controls-wrapper {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: 380px;
-  flex: 1; 
-  margin-bottom: 20px; 
-  flex-shrink: 0;
-}
+.full-info-section { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.title-group { min-width: 0; flex: 1; }
+.title-group h1 { font-size: 22px; line-height: 1.2; margin: 0; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.title-group p { font-size: 15px; color: rgba(255, 255, 255, .72); margin: 3px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.full-info-section .like-btn { flex: none; color: #fff; }
+.full-info-section .like-btn.is-liked { color: var(--accent); }
 
-@media (max-height: 700px) {
-  .full-player-controls-wrapper {
-    flex: 1.2; /* Prende lo spazio rimanente in basso in modo proporzionato */
-    margin-bottom: 5px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center; /* Centra i testi e i tasti nel loro spazio assegnato */
-  }
-}
+.full-progress-section { margin-bottom: 10px; }
+.full-progress-container { padding: 10px 0; cursor: pointer; }
+.full-progress-bg { height: 4px; background: rgba(255, 255, 255, .28); width: 100%; border-radius: 2px; position: relative; }
+.full-progress-fill { height: 100%; background: #fff; border-radius: 2px; transition: width .1s linear; }
+.progress-knob { width: 12px; height: 12px; background: #fff; border-radius: 50%; position: absolute; top: 50%; transform: translate(-50%, -50%); transition: left .1s linear; }
+.full-time-labels { display: flex; justify-content: space-between; font-size: 12px; color: rgba(255, 255, 255, .68); margin-top: 2px; }
 
-/* Riduciamo leggermente i margini interni per compattezza */
-.full-info-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px; 
-  flex-shrink: 0;
-}
-
-.title-group {
-  min-width: 0;
-  flex: 1;
-  margin-right: 10px;
-}
-
-.title-group h1 {
-  font-size: 22px; 
-  margin: 0;
-  font-weight: 800;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.title-group p {
-  font-size: 15px;
-  color: rgba(255,255,255,0.7);
-  margin: 4px 0 0 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.full-progress-section { 
-  margin-bottom: 20px;
-  flex-shrink: 0;
-}
-
-.full-progress-container {
-  padding: 8px 0; /* Aumenta l'area cliccabile per il seek */
-  cursor: pointer;
-}
-
-.full-progress-bg {
-  height: 4px;
-  background: rgba(255,255,255,0.2);
-  width: 100%;
-  border-radius: 2px;
-  position: relative;
-}
-
-.full-progress-fill {
-  height: 100%;
-  background: white;
-  border-radius: 2px;
-  transition: width 0.1s linear;
-}
-
-.progress-knob {
-  width: 12px;
-  height: 12px;
-  background: white;
-  border-radius: 50%;
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  transition: left 0.1s linear;
-}
-
-.full-time-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: rgba(255,255,255,0.6);
-  margin-top: 6px;
-}
-
-.full-controls-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px; /* Margine ridotto verso il footer */
-  flex-shrink: 0;
-  padding: 0 10px;
-}
-
-/* FIX TASTO TONDO */
+.full-controls-main { display: flex; justify-content: space-between; align-items: center; margin: 4px 0 16px; }
+.fp-ctl { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 44px; color: #fff; }
 .big-play-pause {
-  width: 64px !important;
-  height: 64px !important;
-  min-width: 64px !important;
-  max-width: 64px !important;
-  min-height: 64px !important;
-  max-height: 64px !important;
-  flex-shrink: 0 !important;
-  background-color: #ffffff !important;
-  border: none !important;
-  outline: none !important;
-  border-radius: 50% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  cursor: pointer;
-  padding: 0 !important;
+  width: 68px; height: 68px; flex: none; border-radius: 50%;
+  background: #fff; color: #121212;
+  display: flex; align-items: center; justify-content: center;
 }
+.big-play-pause svg { fill: #121212; stroke: #121212; }
 
-/* Colore nero solido forzato al Play/Pause */
-.big-play-pause svg path,
-.big-play-pause svg rect,
-.big-play-pause svg polygon {
-  fill: #121212 !important;
-  stroke: #121212 !important;
-  stroke-width: 0px !important;
-}
+.full-player-footer { display: flex; justify-content: space-between; align-items: center; color: rgba(255, 255, 255, .85); }
+.footer-right-icons { display: flex; gap: 8px; }
 
-.full-player-footer {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  color: rgba(255,255,255,0.7);
-  flex-shrink: 0;
-  margin: 0; /* Reset margini */
-  padding-bottom: clamp(0px, 4vh, 40px);
-}
+.active-accent { color: var(--accent) !important; }
+.active-green { color: var(--accent) !important; }
 
-.footer-right-icons {
-  display: flex;
-  gap: 24px;
-}
-
+/* schermi bassi (iPhone SE, telefoni in orizzontale): cover più piccola, spazi ridotti */
 @media (max-height: 700px) {
-  .title-group h1 { font-size: 18px !important; }
-  .title-group p { font-size: 14px !important; }
-  
-  /* Riduciamo lo spazio tra titolo e barra di progresso */
-  .full-info-section {
-    margin-bottom: 10px !important;
-  }
-
-  /* Riduciamo lo spazio tra barra di progresso e pulsanti */
-  .full-progress-section {
-    margin-bottom: 10px !important;
-  }
-
-  .big-play-pause { 
-    width: 54px !important; 
-    height: 54px !important; 
-    min-width: 54px !important; 
-    min-height: 54px !important;
-    flex-shrink: 0 !important;
-  }
-
-  /* Distribuiamo meglio i pulsanti orizzontalmente per non farli sembrare ammucchiati */
-  .full-controls-main { 
-    margin-bottom: 5px !important;
-    padding: 0 5px !important; 
-  }
-  
-  .full-player-footer {
-    padding-bottom: 5px !important;
-  }
+  .full-player-header { height: 40px; }
+  .full-player-main { margin: 6px 0; }
+  .title-group h1 { font-size: 19px; }
+  .full-info-section { margin-bottom: 6px; }
+  .big-play-pause { width: 58px; height: 58px; }
+  .full-controls-main { margin-bottom: 8px; }
 }
-
-.active-green { color: #1ed760 !important; }

@@ -21,6 +21,7 @@ import ArtistDetail from './pages/ArtistDetail';
 import Library from './pages/Library';
 import Search from './pages/Search';
 import PlaylistDetail from './pages/PlaylistDetail';
+import Recents from './pages/Recents';
 import LikedSongs from './pages/LikedSongs';
 import CreatePlaylist from './pages/CreatePlaylist';
 import Offline from './pages/Offline';
@@ -92,6 +93,7 @@ function App() {
                 <Route path="/create" element={<CreatePlaylist />} />
                 <Route path="/playlist/:id" element={<PlaylistDetail />} />
                 <Route path="/liked" element={<LikedSongs />} />
+                <Route path="/recents" element={<Recents />} />
                 <Route path="/offline" element={<Offline />} />
                 <Route path="/upload" element={<Upload />} />
                 <Route path="/diagnostica" element={<Diagnostics />} />

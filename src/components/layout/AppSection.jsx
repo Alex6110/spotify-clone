@@ -5,7 +5,7 @@ import { canPromptInstall, isIos, isSecure, isStandalone, onInstallChange, promp
 import { formatBytes, isOfflineSupported, requestPersistence, storageInfo, useOfflineIds } from '../../lib/offline';
 
 // Sezione "App e offline" delle impostazioni: installazione come app e spazio usato dai download.
-const AppSection = ({ onNavigate }) => {
+const AppSection = ({ onNavigate, hideLinks = false }) => {
   const canInstall = useSyncExternalStore(onInstallChange, canPromptInstall);
   const ids = useOfflineIds();
   const [info, setInfo] = useState(null);
@@ -40,10 +40,12 @@ const AppSection = ({ onNavigate }) => {
         <p className="app-note">Dal menu del browser scegli "Installa app" o "Aggiungi alla schermata Home".</p>
       )}
 
-      <Link to="/upload" className="app-link" onClick={onNavigate}>
-        <Upload size={18} />
-        <span><strong>Carica musica</strong><small>Aggiungi brani o album alla libreria</small></span>
-      </Link>
+      {!hideLinks && (
+        <Link to="/upload" className="app-link" onClick={onNavigate}>
+          <Upload size={18} />
+          <span><strong>Carica musica</strong><small>Aggiungi brani o album alla libreria</small></span>
+        </Link>
+      )}
 
       <Link to="/diagnostica" className="app-link" onClick={onNavigate}>
         <Smartphone size={18} />
@@ -52,10 +54,12 @@ const AppSection = ({ onNavigate }) => {
 
       {isOfflineSupported() && (
         <>
-          <Link to="/offline" className="app-link" onClick={onNavigate}>
-            <ArrowDownToLine size={18} />
-            <span><strong>Scaricati</strong><small>{ids.size} brani{info?.usage != null ? ` · ${formatBytes(info.usage)} usati` : ''}</small></span>
-          </Link>
+          {!hideLinks && (
+            <Link to="/offline" className="app-link" onClick={onNavigate}>
+              <ArrowDownToLine size={18} />
+              <span><strong>Scaricati</strong><small>{ids.size} brani{info?.usage != null ? ` · ${formatBytes(info.usage)} usati` : ''}</small></span>
+            </Link>
+          )}
           {info && !info.persisted && ids.size > 0 && (
             <button type="button" className="pill-btn" onClick={async () => { await requestPersistence(); setInfo(await storageInfo()); }}>Proteggi i download dalla pulizia automatica</button>
           )}
