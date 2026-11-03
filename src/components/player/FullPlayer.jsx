@@ -1,8 +1,8 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { PlayerContext } from '../../context/PlayerContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, animate, useMotionValue } from 'framer-motion';
 import { ChevronDown, Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1, ListMusic, Share2, MonitorSpeaker } from 'lucide-react';
 import LikeButton from '../ui/LikeButton';
 import { TrackMenuButton } from '../ui/TrackMenu';
@@ -16,6 +16,7 @@ const DEFAULT_BG = { top: 'hsl(0 0% 24%)', mid: 'hsl(0 0% 14%)', bottom: 'hsl(0 
 const FullPlayer = ({ onClose, cover }) => {
   const { currentSong, isPlaying, togglePlay, currentTime, duration, seekTo, nextSong, prevSong, isShuffle, toggleShuffle, repeatMode, setRepeatMode } = useContext(PlayerContext);
   const [showQueue, setShowQueue] = useState(false);
+  const [scrub, setScrub] = useState(null);
   const [bg, setBg] = useState(DEFAULT_BG);
   const toast = useToast();
   const { pathname } = useLocation();
@@ -31,13 +32,59 @@ const FullPlayer = ({ onClose, cover }) => {
   const [startPath] = useState(pathname);
   useEffect(() => { if (pathname !== startPath) onClose(); }, [pathname, startPath, onClose]);
 
+  // --- gesti: trascina in giù = chiudi, trascina di lato sulla copertina = brano precedente/successivo ---
+  const y = useMotionValue(0);
+  const coverX = useMotionValue(0);
+  const g = useRef(null);
+  const onTouchStart = (e) => {
+    if (e.touches.length !== 1 || e.target.closest('button, a, .full-progress-container')) { g.current = null; return; }
+    const t = e.touches[0];
+    g.current = { x: t.clientX, y: t.clientY, axis: null, onCover: !!e.target.closest('.full-player-main') };
+  };
+  const onTouchMove = (e) => {
+    const s = g.current;
+    if (!s) return;
+    const dx = e.touches[0].clientX - s.x;
+    const dy = e.touches[0].clientY - s.y;
+    if (!s.axis && Math.hypot(dx, dy) > 10) s.axis = Math.abs(dx) > Math.abs(dy) && s.onCover ? 'x' : 'y';
+    if (s.axis === 'x') coverX.set(dx * 0.7);
+    else if (s.axis === 'y') y.set(Math.max(0, dy) * 0.9);
+  };
+  const onTouchEnd = (e) => {
+    const s = g.current;
+    g.current = null;
+    if (!s?.axis) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    if (s.axis === 'x') {
+      animate(coverX, 0, { type: 'spring', stiffness: 400, damping: 32 });
+      if (dx < -70) nextSong(); else if (dx > 70) prevSong();
+    } else if (dy > 130) {
+      onClose();
+    } else {
+      animate(y, 0, { type: 'spring', stiffness: 400, damping: 36 });
+    }
+  };
+
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
+  const shownTime = scrub !== null && duration ? scrub * duration : currentTime;
+  const shownPercent = scrub !== null ? scrub * 100 : progressPercent;
   const formatTime = (time) => {
     const t = Math.max(0, Number.isFinite(time) ? time : 0);
     const min = Math.floor(t / 60);
     const sec = Math.floor(t % 60);
     return `${min}:${sec < 10 ? '0' : ''}${sec}`;
   };
+
+  // barra di avanzamento: tocco o trascinamento
+  const ratioOf = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  };
+  const seekDown = (e) => { e.currentTarget.setPointerCapture?.(e.pointerId); setScrub(ratioOf(e)); };
+  const seekMove = (e) => { if (scrub !== null) setScrub(ratioOf(e)); };
+  const seekUp = (e) => { if (scrub === null) return; if (duration) seekTo(ratioOf(e) * duration); setScrub(null); };
 
   const share = async () => {
     const text = `${currentSong.title} - ${currentSong.artist || ''}`.trim();
@@ -49,17 +96,22 @@ const FullPlayer = ({ onClose, cover }) => {
 
   return (
     <>
+      {/* Portale su <body>: fuori da .mobile-fixed-bottom (che ha pointer-events:none e uno z-index basso) i tocchi arrivano al player */}
+      {createPortal(
       <motion.div
-        className="full-player-overlay"
+        className="full-player-slot"
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 160, mass: 1.2 }}
-        drag="y"
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={0.6}
-        onDragEnd={(_, info) => { if (info.offset.y > 150 || info.velocity.y > 500) onClose(); }}
-        style={{ background: `linear-gradient(180deg, ${bg.top} 0%, ${bg.mid} 55%, ${bg.bottom} 100%)` }}
+      >
+      <motion.div
+        className="full-player-overlay"
+        style={{ y, background: `linear-gradient(180deg, ${bg.top} 0%, ${bg.mid} 55%, ${bg.bottom} 100%)` }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
       >
         <header className="full-player-header">
           <button type="button" className="fp-icon-btn" onClick={onClose} aria-label="Chiudi"><ChevronDown size={30} /></button>
@@ -68,7 +120,7 @@ const FullPlayer = ({ onClose, cover }) => {
         </header>
 
         <div className="full-player-main">
-          <motion.img initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} src={cover} alt="Copertina" className="full-cover-art" draggable={false} />
+          <motion.img initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ x: coverX }} src={cover} alt="Copertina" className="full-cover-art" draggable={false} />
         </div>
 
         <div className="full-player-controls-wrapper">
@@ -81,18 +133,15 @@ const FullPlayer = ({ onClose, cover }) => {
           </div>
 
           <div className="full-progress-section">
-            <div className="full-progress-container" onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              seekTo(((e.clientX - rect.left) / rect.width) * duration);
-            }}>
+            <div className="full-progress-container" onPointerDown={seekDown} onPointerMove={seekMove} onPointerUp={seekUp} onPointerCancel={() => setScrub(null)}>
               <div className="full-progress-bg">
-                <div className="full-progress-fill" style={{ width: `${progressPercent}%` }} />
-                <div className="progress-knob" style={{ left: `${progressPercent}%` }} />
+                <div className="full-progress-fill" style={{ width: `${shownPercent}%` }} />
+                <div className="progress-knob" style={{ left: `${shownPercent}%` }} />
               </div>
             </div>
             <div className="full-time-labels">
-              <span>{formatTime(currentTime)}</span>
-              <span>-{formatTime(duration - currentTime)}</span>
+              <span>{formatTime(shownTime)}</span>
+              <span>-{formatTime(duration - shownTime)}</span>
             </div>
           </div>
 
@@ -119,6 +168,9 @@ const FullPlayer = ({ onClose, cover }) => {
           </footer>
         </div>
       </motion.div>
+      </motion.div>,
+      document.body,
+      )}
 
       {/* La coda sta fuori dal player trascinabile (portale): trascinandola verso il basso non chiude anche il player */}
       {createPortal(

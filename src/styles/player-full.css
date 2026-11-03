@@ -1,8 +1,10 @@
 /* --- PLAYER A TUTTO SCHERMO (mobile) --- */
+.full-player-slot { position: fixed; inset: 0; z-index: 2000; pointer-events: auto; }
 .full-player-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
-  z-index: 2000;
+  touch-action: none;
+  -webkit-user-select: none; user-select: none;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -23,7 +25,7 @@
   margin: 0 -8px;
 }
 .header-status { text-align: center; font-size: 14px; font-weight: 700; letter-spacing: .01em; }
-.fp-icon-btn { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; color: #fff; justify-self: center; }
+.fp-icon-btn { pointer-events: auto; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; color: #fff; justify-self: center; }
 
 /* copertina: quadrata, grande quanto lo spazio permette */
 .full-player-main {
@@ -57,7 +59,7 @@
 .full-info-section .like-btn.is-liked { color: var(--accent); }
 
 .full-progress-section { margin-bottom: 10px; }
-.full-progress-container { padding: 10px 0; cursor: pointer; }
+.full-progress-container { padding: 14px 0; cursor: pointer; touch-action: none; }
 .full-progress-bg { height: 4px; background: rgba(255, 255, 255, .28); width: 100%; border-radius: 2px; position: relative; }
 .full-progress-fill { height: 100%; background: #fff; border-radius: 2px; transition: width .1s linear; }
 .progress-knob { width: 12px; height: 12px; background: #fff; border-radius: 50%; position: absolute; top: 50%; transform: translate(-50%, -50%); transition: left .1s linear; }

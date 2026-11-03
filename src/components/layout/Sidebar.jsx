@@ -1,6 +1,6 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { X, LogOut, Check, Clock, Upload, ArrowDownToLine, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LogOut, Check, Clock, Upload, ArrowDownToLine, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ThemeContext, RADIUS_OPTIONS, ACCENT_PRESETS } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { isOfflineSupported, useOfflineIds } from '../../lib/offline';
@@ -16,6 +16,27 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   useEffect(() => { if (!isOpen) { const t = setTimeout(() => setView('menu'), 350); return () => clearTimeout(t); } return undefined; }, [isOpen]);
 
+  // chiusura con trascinamento verso sinistra (o toccando fuori dal menu)
+  const [dragX, setDragX] = useState(null);
+  const g = useRef(null);
+  const onTouchStart = (e) => { const t = e.touches[0]; g.current = { x: t.clientX, y: t.clientY, axis: null }; };
+  const onTouchMove = (e) => {
+    const s = g.current;
+    if (!s) return;
+    const dx = e.touches[0].clientX - s.x;
+    const dy = e.touches[0].clientY - s.y;
+    if (!s.axis && Math.hypot(dx, dy) > 8) s.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    if (s.axis === 'x') setDragX(Math.min(0, dx));
+  };
+  const onTouchEnd = (e) => {
+    const s = g.current;
+    g.current = null;
+    if (s?.axis !== 'x') return;
+    const dx = e.changedTouches[0].clientX - s.x;
+    setDragX(null);
+    if (dx < -70) onClose();
+  };
+
   const handleLogout = () => {
     onClose();
     logout(); // il cambio di utente smonta player e socket: niente reload della pagina
@@ -24,15 +45,23 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   return (
     <>
-      {isOpen && <div className="sidebar-backdrop" onClick={onClose} aria-hidden="true" />}
-      <aside className={`sidebar-menu ${isOpen ? 'open' : ''}`} aria-hidden={!isOpen} aria-label="Menu">
+      {isOpen && <div className="sidebar-backdrop" onClick={onClose} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} aria-hidden="true" />}
+      <aside
+        className={`sidebar-menu ${isOpen ? 'open' : ''}`}
+        aria-hidden={!isOpen}
+        aria-label="Menu"
+        style={dragX !== null ? { transform: `translateX(${dragX}px)`, transition: 'none' } : undefined}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={() => { g.current = null; setDragX(null); }}
+      >
         {view === 'menu' ? (
           <>
             <div className="sidebar-top">
               <div className="profile-card">
                 <span className="profile-avatar" aria-hidden="true">{initial}</span>
                 <span className="profile-text"><strong>{user?.name}</strong><small>{user?.email}</small></span>
-                <button type="button" onClick={onClose} className="close-btn" aria-label="Chiudi"><X size={22} /></button>
               </div>
             </div>
 
@@ -58,7 +87,6 @@ const Sidebar = ({ isOpen, onClose }) => {
             <div className="sidebar-header">
               <button type="button" onClick={() => setView('menu')} className="close-btn" aria-label="Indietro"><ChevronLeft size={24} /></button>
               <h2>Impostazioni e privacy</h2>
-              <button type="button" onClick={onClose} className="close-btn" aria-label="Chiudi"><X size={22} /></button>
             </div>
 
             <div className="sidebar-content">

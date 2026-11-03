@@ -170,8 +170,8 @@ h1, h2, h3, h4, p { margin: 0; }
   position: fixed; inset: 0;
   display: flex; flex-direction: column;
   overflow: hidden;
-  /* sfondo unico che parte da sotto la barra di stato: così in alto non si vede nessuna "fascia" di colore diverso */
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 22%, var(--panel)) 0, var(--panel) 420px), var(--panel);
+  /* sfondo tinta unita: nessuna sfumatura colorata in alto, la barra di stato e l'intestazione hanno lo stesso colore del resto */
+  background: var(--panel);
 }
 .mobile-shell .main-content { background: transparent; }
 .app-header {

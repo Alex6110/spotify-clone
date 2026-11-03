@@ -160,13 +160,25 @@
 .track-menu {
   position: fixed; z-index: 4001; padding: 6px; border-radius: var(--radius-container);
   background: var(--panel-3); border: 1px solid var(--line); box-shadow: 0 18px 48px rgba(0, 0, 0, .55);
-  max-height: min(70vh, 480px); overflow-y: auto; display: flex; flex-direction: column;
+  max-height: min(70vh, 480px); display: flex; flex-direction: column; overflow: hidden;
 }
+.menu-body { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; flex: 1; }
 .track-menu.is-sheet {
-  left: 0; right: 0; bottom: 0; top: auto; width: auto; max-height: 82dvh;
+  left: 0; right: 0; bottom: 0; top: auto; width: auto;
+  height: min(60dvh, 520px); max-height: none;
   border-radius: 20px 20px 0 0; padding: 8px 10px calc(14px + var(--safe-bottom));
+  background: color-mix(in srgb, var(--panel-3) 86%, transparent);
+  backdrop-filter: blur(26px); -webkit-backdrop-filter: blur(26px);
   animation: sheet-up .2s ease-out;
+  transition: height .28s cubic-bezier(.3, .8, .3, 1), border-radius .28s, background .28s;
 }
+/* a metà schermo si vede solo l'inizio dell'elenco (come Spotify); tirando su il foglio si apre del tutto e scorre */
+.track-menu.is-sheet .menu-body { overflow-y: hidden; }
+.track-menu.is-sheet.is-expanded {
+  height: calc(100dvh - var(--safe-top) - 10px); border-radius: 16px 16px 0 0; background: #1c1c1e;
+}
+.track-menu.is-sheet.is-expanded .menu-body { overflow-y: auto; }
+.sheet-top { flex: none; touch-action: none; }
 @keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .sheet-grip { width: 40px; height: 4px; border-radius: 4px; background: rgba(255, 255, 255, .22); margin: 2px auto 10px; flex: none; }
 .menu-head { display: flex; align-items: center; gap: 12px; padding: 8px 10px 12px; border-bottom: 1px solid var(--line); margin-bottom: 4px; min-width: 0; }
