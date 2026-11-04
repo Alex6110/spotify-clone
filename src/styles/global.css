@@ -4,6 +4,8 @@
    e --radius-container (raggio di pannelli e schede) direttamente su <html>.
    ============================================================ */
 :root {
+  --sticky-top: 0px; /* spazio in alto occupato dalla barra di stato (solo mobile, vedi .mobile-shell) */
+  --hdr-h: 60px;
   --bg: #0a0a0b;
   --panel: #131315;
   --panel-2: #1b1b1e;
@@ -173,7 +175,25 @@ h1, h2, h3, h4, p { margin: 0; }
   /* sfondo tinta unita: nessuna sfumatura colorata in alto, la barra di stato e l'intestazione hanno lo stesso colore del resto */
   background: var(--panel);
 }
-.mobile-shell .main-content { background: transparent; }
+.mobile-shell { --sticky-top: calc(var(--safe-top) + var(--edge-extra, 0px)); }
+.mobile-shell .main-content { background: transparent; padding-top: 0; }
+/* spazio sotto la barra di stato: è un elemento (non un padding) così gli elementi "sticky" si fermano tutti alla stessa altezza in ogni browser */
+.mobile-shell .main-content::before { content: ''; display: block; height: var(--sticky-top); }
+.top-cover { position: absolute; top: 0; left: 0; right: 0; height: var(--sticky-top); background: var(--panel); z-index: 60; pointer-events: none; }
+
+/* Intestazione: iniziale + titolo. Fissa in alto, il contenuto le scorre sotto con una sfumatura. */
+.m-header {
+  display: flex; align-items: center; gap: 12px; height: var(--hdr-h);
+  margin: 0 -16px; padding: 0 16px 6px;
+  background: linear-gradient(to bottom, var(--panel) 78%, color-mix(in srgb, var(--panel) 0%, transparent));
+}
+.m-header.is-sticky { position: sticky; top: var(--sticky-top); z-index: 20; }
+.m-header .user-avatar { width: 40px; height: 40px; min-width: 40px; flex-basis: 40px; font-size: 16px; }
+.m-header-title { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+.m-header.is-big .m-header-title { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.m-header-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.m-header-actions button { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: var(--text); }
+.m-header-actions button:active { background: rgba(255, 255, 255, .1); }
 .app-header {
   flex: 0 0 calc(var(--header-height) + var(--safe-top) + var(--edge-extra, 0px));
   display: flex; align-items: center; gap: 12px;
@@ -202,6 +222,26 @@ h1, h2, h3, h4, p { margin: 0; }
 }
 .nav-item span { font-size: 11px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }
 .nav-item.active { color: var(--accent); }
+.nav-create-icon { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; transition: transform .28s cubic-bezier(.3, 1.4, .5, 1), background .2s, color .2s, width .22s, height .22s; }
+.nav-create.is-open .nav-create-icon { width: 54px; height: 54px; background: #fff; color: #111; transform: rotate(135deg); }
+.nav-create.is-open .nav-create-label { display: none; }
+.nav-create.is-open { color: #fff; }
+.nav-create .nav-create-label { font-size: 11px; font-weight: 600; }
+
+/* Menu "Crea" */
+.create-backdrop { position: absolute; inset: 0; z-index: 95; background: rgba(0, 0, 0, .72); }
+.create-menu {
+  position: absolute; z-index: 110; left: 12px; right: 12px;
+  bottom: calc(var(--nav-height) + var(--safe-bottom) + 12px);
+  padding: 8px; border-radius: 22px; background: color-mix(in srgb, #2a2a2e 94%, transparent);
+  border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+}
+.create-item { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px; border-radius: 16px; text-align: left; }
+.create-item:active { background: rgba(255, 255, 255, .08); }
+.create-ico { width: 52px; height: 52px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, .12); color: #eee; }
+.create-item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.create-item-text strong { font-size: 17px; font-weight: 700; }
+.create-item-text small { font-size: 14px; color: var(--text-2); }
 .nav-item.active svg { stroke-width: 2.4; }
 
 /* ---------- Auth ---------- */

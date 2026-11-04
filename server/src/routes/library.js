@@ -85,7 +85,7 @@ router.get('/artists', async (req, res) => {
   const { limit, offset } = page(req, 300, 60);
   const q = normKey(req.query.q);
   const where = { albums: { some: {} }, ...(q ? { key: { contains: q } } : {}) };
-  const orderBy = req.query.sort === 'albums' ? [{ albums: { _count: 'desc' } }, { key: 'asc' }] : [{ key: 'asc' }];
+  const orderBy = req.query.sort === 'albums' ? [{ albums: { _count: 'desc' } }, { key: 'asc' }] : req.query.sort === 'recent' ? [{ id: 'desc' }] : [{ key: 'asc' }];
   const [total, rows] = await Promise.all([
     prisma.artist.count({ where }),
     prisma.artist.findMany({

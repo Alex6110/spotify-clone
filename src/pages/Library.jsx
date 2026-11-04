@@ -1,104 +1,145 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowDownToLine, Heart, Plus, Upload } from 'lucide-react';
-import { api, coverOf, errorMessage } from '../lib/api';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ArrowDownToLine, ArrowUpDown, Heart, LayoutGrid, List, Plus, Search as SearchIcon, X, Pin } from 'lucide-react';
+import { api, coverOf, photoOf, errorMessage } from '../lib/api';
 import { usePlaylists } from '../lib/playlists';
+import { useMobileUi } from '../context/MobileUiContext';
+import MobileHeader from '../components/layout/MobileHeader';
 import PlaylistCover from '../components/ui/PlaylistCover';
-import '../styles/Home.css';
+import '../styles/discover.css';
 
 const PAGE = 48;
-const SORTS = [
-  { id: 'recent', label: 'Recenti' },
-  { id: 'title', label: 'Titolo' },
-  { id: 'artist', label: 'Artista' },
-];
+const TABS = [{ id: 'playlists', label: 'Playlist' }, { id: 'albums', label: 'Album' }, { id: 'artists', label: 'Artisti' }];
+const SORTS = [{ id: 'recent', label: 'Recenti' }, { id: 'title', label: 'Titolo' }];
+const viewKey = 'musica_library_view';
+const readView = () => { try { return localStorage.getItem(viewKey) === 'grid' ? 'grid' : 'list'; } catch { return 'list'; } };
 
-const TABS = [{ id: 'albums', label: 'Album' }, { id: 'playlists', label: 'Playlist' }];
+// una voce della libreria, in elenco o in griglia
+const Item = ({ to, art, title, sub, round, pinned, view }) => (
+  <Link to={to} className={`lib-entry ${view === 'grid' ? 'is-grid' : ''}`}>
+    <span className={`lib-art${round ? ' is-round' : ''}`}>{art}</span>
+    <span className="lib-text">
+      <strong>{title}</strong>
+      <small>{pinned && <Pin size={13} className="lib-pin" />}{sub}</small>
+    </span>
+  </Link>
+);
 
 const Library = () => {
-  const [tab, setTab] = useState('albums');
-  const { playlists } = usePlaylists();
+  const ui = useMobileUi();
+  const [params, setParams] = useSearchParams();
+  const tab = TABS.some((t) => t.id === params.get('tab')) ? params.get('tab') : null; // null = tutto
+  const genre = params.get('genre') || '';
   const [sort, setSort] = useState('recent');
-  const [items, setItems] = useState([]);
-  const [total, setTotal] = useState(0);
+  const [view, setView] = useState(readView);
+  const [showFilter, setShowFilter] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const { playlists } = usePlaylists();
+  const [albums, setAlbums] = useState({ items: [], total: 0 });
+  const [artists, setArtists] = useState({ items: [], total: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const load = useCallback(async (offset, replace) => {
-    setLoading(true);
-    setError('');
-    try {
-      const { data } = await api.get('/api/library/albums', { params: { sort, limit: PAGE, offset } });
-      setTotal(data.total);
-      setItems((prev) => (replace ? data.items : [...prev, ...data.items]));
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [sort]);
+  useEffect(() => { const t = setTimeout(() => setDebounced(filter.trim()), 250); return () => clearTimeout(t); }, [filter]);
 
-  useEffect(() => { load(0, true); }, [load]);
+  const wantAlbums = tab === null || tab === 'albums';
+  const wantArtists = tab === 'artists';
+
+  const loadAlbums = useCallback(async (offset, replace) => {
+    setLoading(true); setError('');
+    try {
+      const { data } = await api.get('/api/library/albums', { params: { sort: sort === 'title' ? 'title' : 'recent', limit: PAGE, offset, ...(debounced ? { q: debounced } : {}), ...(genre ? { genre } : {}) } });
+      setAlbums((p) => ({ total: data.total, items: replace ? data.items : [...p.items, ...data.items] }));
+    } catch (e) { setError(errorMessage(e)); } finally { setLoading(false); }
+  }, [sort, debounced, genre]);
+
+  const loadArtists = useCallback(async (offset, replace) => {
+    setLoading(true); setError('');
+    try {
+      const { data } = await api.get('/api/library/artists', { params: { sort: sort === 'title' ? 'title' : 'recent', limit: PAGE, offset, ...(debounced ? { q: debounced } : {}) } });
+      setArtists((p) => ({ total: data.total, items: replace ? data.items : [...p.items, ...data.items] }));
+    } catch (e) { setError(errorMessage(e)); } finally { setLoading(false); }
+  }, [sort, debounced]);
+
+  useEffect(() => { if (wantAlbums) loadAlbums(0, true); }, [wantAlbums, loadAlbums]);
+  useEffect(() => { if (wantArtists) loadArtists(0, true); }, [wantArtists, loadArtists]);
+
+  const setTab = (id) => {
+    const next = new URLSearchParams(params);
+    if (id && id !== tab) next.set('tab', id); else next.delete('tab');
+    setParams(next, { replace: true });
+  };
+  const clearGenre = () => { const next = new URLSearchParams(params); next.delete('genre'); setParams(next, { replace: true }); };
+  const toggleView = () => { const v = view === 'list' ? 'grid' : 'list'; setView(v); try { localStorage.setItem(viewKey, v); } catch { /* niente */ } };
+  const nextSort = () => setSort((s) => SORTS[(SORTS.findIndex((x) => x.id === s) + 1) % SORTS.length].id);
+
+  const pls = useMemo(() => {
+    let list = [...(playlists || [])];
+    if (debounced) list = list.filter((p) => p.name.toLowerCase().includes(debounced.toLowerCase()));
+    if (sort === 'title') list.sort((a, b) => a.name.localeCompare(b.name, 'it'));
+    else list.reverse();
+    return list;
+  }, [playlists, debounced, sort]);
+
+  const showPinned = (tab === null || tab === 'playlists') && !debounced;
+  const showPlaylists = tab === null || tab === 'playlists';
 
   return (
-    <div className="home-page">
-      <div className="page-head">
-        <h3>La tua libreria</h3>
-        <Link to="/upload" className="pill-btn"><Upload size={16} /> Carica musica</Link>
-      </div>
-      <div className="chip-row" role="tablist" aria-label="Sezione">
-        {TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`chip ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
-        ))}
-      </div>
+    <div className="lib-page">
+      <MobileHeader>
+        <button type="button" aria-label="Cerca nella libreria" onClick={() => { setShowFilter((v) => !v); if (showFilter) setFilter(''); }}><SearchIcon size={26} /></button>
+        <button type="button" aria-label="Crea" onClick={() => ui?.openCreate()}><Plus size={30} /></button>
+      </MobileHeader>
 
-      {tab === 'playlists' && (
-        <div className="album-grid">
-          <Link to="/liked" className="album-card">
-            <div className="pl-cover pl-cover-empty pl-cover-liked album-cover"><Heart size="40%" fill="currentColor" /></div>
-            <p>Brani che ti piacciono</p><span>Playlist</span>
-          </Link>
-          <Link to="/offline" className="album-card">
-            <div className="pl-cover pl-cover-empty album-cover"><ArrowDownToLine size="40%" /></div>
-            <p>Scaricati</p><span>Sul dispositivo</span>
-          </Link>
-          <Link to="/create" className="album-card">
-            <div className="pl-cover pl-cover-empty album-cover"><Plus size="40%" /></div>
-            <p>Nuova playlist</p><span>Crea</span>
-          </Link>
-          {playlists?.map((pl) => (
-            <Link to={`/playlist/${pl.id}`} key={pl.id} className="album-card">
-              <PlaylistCover covers={pl.covers} className="album-cover" />
-              <p>{pl.name}</p><span>{pl.trackCount} brani</span>
-            </Link>
+      <div className="lib-sticky">
+        <div className="lib-chips" role="tablist" aria-label="Sezione">
+          {tab && <button type="button" className="chip-x" aria-label="Mostra tutto" onClick={() => setTab(null)}><X size={18} /></button>}
+          {TABS.filter((t) => !tab || t.id === tab).map((t) => (
+            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`lib-chip${tab === t.id ? ' active' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
           ))}
+          {genre && <button type="button" className="lib-chip active" onClick={clearGenre}>{genre} <X size={14} /></button>}
         </div>
-      )}
+        {showFilter && (
+          <label className="lib-filter">
+            <SearchIcon size={18} />
+            <input autoFocus value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Cerca nella libreria" />
+            {filter && <button type="button" aria-label="Cancella" onClick={() => setFilter('')}><X size={16} /></button>}
+          </label>
+        )}
+      </div>
 
-      {tab === 'albums' && <>
-      <div className="chip-row" role="tablist" aria-label="Ordinamento">
-        {SORTS.map((s) => (
-          <button key={s.id} type="button" role="tab" aria-selected={sort === s.id} className={`chip ${sort === s.id ? 'active' : ''}`} onClick={() => setSort(s.id)}>
-            {s.label}
-          </button>
+      <div className="lib-sortrow">
+        <button type="button" className="lib-sort" onClick={nextSort}><ArrowUpDown size={18} /> {SORTS.find((s) => s.id === sort).label}</button>
+        <button type="button" className="lib-viewbtn" onClick={toggleView} aria-label={view === 'list' ? 'Mostra a griglia' : 'Mostra a elenco'}>{view === 'list' ? <LayoutGrid size={22} /> : <List size={22} />}</button>
+      </div>
+
+      <div className={view === 'grid' ? 'lib-grid' : 'lib-entries'}>
+        {showPinned && (
+          <>
+            <Item view={view} pinned to="/liked" title="Brani che ti piacciono" sub="Playlist" art={<span className="pl-cover pl-cover-liked pl-cover-empty lib-fill"><Heart size="42%" fill="currentColor" /></span>} />
+            <Item view={view} pinned to="/offline" title="Scaricati" sub="Sul dispositivo" art={<span className="pl-cover pl-cover-empty lib-fill"><ArrowDownToLine size="42%" /></span>} />
+          </>
+        )}
+        {showPlaylists && pls.map((pl) => (
+          <Item key={`p${pl.id}`} view={view} to={`/playlist/${pl.id}`} title={pl.name} sub={`Playlist • ${pl.trackCount} brani`} art={<PlaylistCover covers={pl.covers} className="lib-fill" />} />
+        ))}
+        {wantAlbums && albums.items.map((a) => (
+          <Item key={`a${a.id}`} view={view} to={`/album/${a.id}`} title={a.title} sub={`Album • ${a.artist}`} art={<img src={coverOf(a)} alt="" loading="lazy" className="lib-fill" />} />
+        ))}
+        {wantArtists && artists.items.map((a) => (
+          <Item key={`r${a.id}`} view={view} round to={`/artist/${a.id}`} title={a.name} sub={`Artista • ${a.albumCount} album`} art={<img src={photoOf(a)} alt="" loading="lazy" className="lib-fill" />} />
         ))}
       </div>
-      <div className="album-grid">
-        {items.map((a) => (
-          <Link to={`/album/${a.id}`} key={a.id} className="album-card">
-            <img src={coverOf(a)} alt="" className="album-cover" loading="lazy" />
-            <p>{a.title}</p>
-            <span>{a.artist}</span>
-          </Link>
-        ))}
-      </div>
+
       {error && <p className="form-error">{error}</p>}
-      {items.length < total && (
-        <button type="button" className="pill-btn" disabled={loading} onClick={() => load(items.length, false)}>
-          {loading ? 'Caricamento...' : `Mostra altri (${total - items.length})`}
-        </button>
+      {wantAlbums && albums.items.length < albums.total && (
+        <button type="button" className="pill-btn lib-more" disabled={loading} onClick={() => loadAlbums(albums.items.length, false)}>{loading ? 'Caricamento...' : `Mostra altri (${albums.total - albums.items.length})`}</button>
       )}
-      </>}
+      {wantArtists && artists.items.length < artists.total && (
+        <button type="button" className="pill-btn lib-more" disabled={loading} onClick={() => loadArtists(artists.items.length, false)}>{loading ? 'Caricamento...' : `Mostra altri (${artists.total - artists.items.length})`}</button>
+      )}
+      {tab === 'playlists' && playlists && pls.length === 0 && debounced && <p className="muted-text">Nessuna playlist trovata.</p>}
     </div>
   );
 };

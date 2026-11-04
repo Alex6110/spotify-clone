@@ -22,6 +22,8 @@ import Library from './pages/Library';
 import Search from './pages/Search';
 import PlaylistDetail from './pages/PlaylistDetail';
 import Recents from './pages/Recents';
+import Mix from './pages/Mix';
+import ArtistExternal from './pages/ArtistExternal';
 import LikedSongs from './pages/LikedSongs';
 import CreatePlaylist from './pages/CreatePlaylist';
 import Offline from './pages/Offline';
@@ -89,7 +91,9 @@ function App() {
                 <Route path="/search" element={<Search />} />
                 <Route path="/library" element={<Library />} />
                 <Route path="/album/:id" element={<AlbumDetail />} />
+                <Route path="/artist/ext/:deezerId" element={<ArtistExternal />} />
                 <Route path="/artist/:id" element={<ArtistDetail />} />
+                <Route path="/mix/:kind/:key" element={<Mix />} />
                 <Route path="/create" element={<CreatePlaylist />} />
                 <Route path="/playlist/:id" element={<PlaylistDetail />} />
                 <Route path="/liked" element={<LikedSongs />} />
