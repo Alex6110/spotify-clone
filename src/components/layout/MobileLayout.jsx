@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import Player from './Player';
 import BottomNav from './BottomNav';
 import Sidebar from './Sidebar';
@@ -10,6 +11,9 @@ const MobileLayout = ({ children }) => {
   const { user } = useAuth();
 
   return (
+    <>
+    {/* fuori dal contenitore a schermo intero: iOS lo considera un elemento a sé in cima alla pagina */}
+    {createPortal(<div className="edge-band" aria-hidden="true" />, document.body)}
     <div className="mobile-shell">
       <Sidebar isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
@@ -27,6 +31,7 @@ const MobileLayout = ({ children }) => {
         <footer className="app-footer"><BottomNav /></footer>
       </div>
     </div>
+    </>
   );
 };
 

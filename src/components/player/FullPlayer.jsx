@@ -113,6 +113,7 @@ const FullPlayer = ({ onClose, cover }) => {
         onTouchEnd={onTouchEnd}
         onTouchCancel={onTouchEnd}
       >
+        <div className="edge-band" style={{ position: 'absolute', zIndex: 5, '--edge-band': bg.top }} aria-hidden="true" />
         <header className="full-player-header">
           <button type="button" className="fp-icon-btn" onClick={onClose} aria-label="Chiudi"><ChevronDown size={30} /></button>
           <span className="header-status">Brano in riproduzione</span>

@@ -1,5 +1,5 @@
-import React, { useContext, useMemo, useEffect, useState, useCallback, useRef } from 'react';
-import { motion, Reorder, useAnimation, AnimatePresence, useDragControls } from 'framer-motion';
+import React, { useContext, useMemo, useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
+import { motion, Reorder, AnimatePresence, useDragControls, useMotionValue, animate } from 'framer-motion';
 import { PlayerStateContext } from '../../context/PlayerContext';
 import { coverOf } from '../../lib/api';
 import { Shuffle, Repeat, Repeat1, Timer, Play, Pause } from 'lucide-react';
@@ -16,11 +16,6 @@ const DragIcon = () => (
 
 const springConfig = { type: "spring", damping: 28, stiffness: 210 };
 
-const sheetVariants = {
-  hidden: { y: "100%" },
-  half: { y: "40%" }, 
-  full: { y: "0%" }   
-};
 
 // ==========================================
 // COMPONENTE SINGOLO BRANO (Con Long-Press Blindato)
@@ -121,14 +116,11 @@ const QueueSheetUI = React.memo(({
   currentSong, upcomingSongs, isPlaying, isShuffle, repeatMode, activeTimer,
   playSong, toggleShuffle, setRepeatMode, startSleepTimer, handleReorder, onClose, getCoverUrl
 }) => {
-  const sheetDragControls = useDragControls();
-  const sheetHandleRef = useRef(null);
   const scrollableRef = useRef(null);
   const [position, setPosition] = useState('half');
   const [isDragging, setIsDragging] = useState(false); 
   const isDraggingRef = useRef(false);
   const [isTimerOpen, setIsTimerOpen] = useState(false);
-  const controls = useAnimation();
   const [localQueue, setLocalQueue] = useState(upcomingSongs);
 
 
@@ -156,26 +148,6 @@ const QueueSheetUI = React.memo(({
   }, []);
 
 
-  // 👈 2. Listener NATIVO: Blocca il Player sottostante in modo assoluto
-  useEffect(() => {
-    const handle = sheetHandleRef.current;
-    if (!handle) return;
-
-    const onPointerDown = (e) => {
-      e.preventDefault();  // Blocca comportamenti strani del browser
-      e.stopPropagation(); // Impedisce al Player sotto di accorgersi del tocco
-
-      // Passa il controllo esclusivo del tocco alla Coda
-      sheetDragControls.start(e);
-    };
-
-    handle.addEventListener('pointerdown', onPointerDown, { passive: false });
-
-    return () => {
-      handle.removeEventListener('pointerdown', onPointerDown);
-    };
-  }, [sheetDragControls]);
-
   // RIGA 136 CIRCA: Modifica le dipendenze e il controllo del useEffect
   useEffect(() => {
     if (!isDragging) { // 👈 Aggiornato senza .current
@@ -183,9 +155,45 @@ const QueueSheetUI = React.memo(({
     }
   }, [upcomingSongs, isDragging]); // 👈 Aggiunto isDragging nelle dipendenze
 
-  useEffect(() => {
-    controls.start(position);
-  }, [position, controls]);
+  // --- posizione del foglio: "top" in pixel (niente percentuali): mezzo schermo, tutto aperto, chiuso ---
+  const topFull = useRef(70);
+  const top = useMotionValue(typeof window !== 'undefined' ? window.innerHeight : 800);
+  const zone = useRef(null);
+  const targetOf = (pos) => (pos === 'full' ? topFull.current : pos === 'half' ? Math.round(window.innerHeight * 0.4) : window.innerHeight);
+  const snap = useCallback((pos) => animate(top, targetOf(pos), springConfig), [top]);
+  const go = (pos) => { setPosition(pos); snap(pos); };
+  const closeSheet = () => { snap('hidden').then(onClose); };
+
+  useLayoutEffect(() => {
+    // distanza dal bordo alto quando il foglio è tutto aperto: sotto la Dynamic Island + un po' di aria (come Spotify)
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;visibility:hidden;height:calc(var(--safe-top, 0px) + 12px)';
+    document.body.appendChild(probe);
+    topFull.current = Math.max(24, probe.offsetHeight);
+    probe.remove();
+    snap('half');
+  }, [snap]);
+
+  // gesto sull'intestazione del foglio: su = apri tutto, giù = riduci / chiudi
+  const onZoneStart = (e) => { zone.current = { y: e.touches[0].clientY, top: top.get(), t: Date.now() }; };
+  const onZoneMove = (e) => {
+    const z = zone.current;
+    if (!z) return;
+    top.set(Math.max(topFull.current, z.top + e.touches[0].clientY - z.y));
+  };
+  const onZoneEnd = (e) => {
+    const z = zone.current;
+    zone.current = null;
+    if (!z) return;
+    const dy = e.changedTouches[0].clientY - z.y;
+    const fast = Math.abs(dy) / Math.max(1, Date.now() - z.t) > 0.5; // px per ms
+    if (position === 'half') {
+      if (dy < -40 || (fast && dy < -15)) go('full');
+      else if (dy > 90 || (fast && dy > 25)) closeSheet();
+      else go('half');
+    } else if (dy > 70 || (fast && dy > 25)) go('half');
+    else go('full');
+  };
 
   const onLocalReorder = (newOrder) => {
     setLocalQueue(newOrder); 
@@ -199,77 +207,34 @@ const QueueSheetUI = React.memo(({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={async (e) => {
-          e.stopPropagation();
-          await controls.start('hidden');
-          onClose();
-        }}
+        onClick={(e) => { e.stopPropagation(); closeSheet(); }}
       />
       
-      <motion.div 
+      {position === 'full' && <div className="edge-band" style={{ zIndex: 3100, '--edge-band': '#121212' }} aria-hidden="true" />}
+
+      <motion.div
         className={`mobile-queue-sheet${position === 'full' ? ' is-full' : ''}`}
-        drag={isDragging ? false : "y"}
+        style={{ top }}
         onPointerDown={(e) => e.stopPropagation()}
-        // Riportato alla normalità: il foglio gestisce il suo drag in modo nativo
-        dragListener={false} // 👈 FONDAMENTALE: Impedisce al foglio di rubare i tocchi alla lista brani
-        dragControls={sheetDragControls} // 👈 Collega il controllo manuale
-        dragConstraints={{ top: 0, bottom: 800 }} 
-        dragElastic={0.1}
-        variants={sheetVariants}
-        initial="hidden"
-        animate={controls} 
-        exit="hidden"
-        transition={springConfig}
-        // Trova questo blocco dentro il motion.div della "mobile-queue-sheet"
-        onDragEnd={async (e, info) => {
-          const { offset, velocity } = info;
-          const dragThreshold = 80;      
-          const velocityThreshold = 400; 
-
-          if (position === 'half') {
-            if (offset.y < -dragThreshold || velocity.y < -velocityThreshold) {
-              setPosition('full');
-            } else if (offset.y > dragThreshold || velocity.y > velocityThreshold) {
-              
-              // 🔴 MODIFICA FONDAMENTALE QUI:
-              // Accompagna il foglio fino in fondo prima di smontarlo.
-              // In questo modo il dito si stacca dallo schermo e l'evento non "cade" sul player sotto!
-              await controls.start('hidden'); 
-              onClose(); 
-              
-            } else {
-              controls.start('half');
-            }
-          } else if (position === 'full') {
-            if (offset.y > dragThreshold || velocity.y > velocityThreshold) {
-              setPosition('half');
-            } else {
-              controls.start('full');
-            }
-          }
-        }}
       >
-        <div 
-          ref={sheetHandleRef}
-          className="queue-handle-area"
-          style={{ 
-            touchAction: 'none', 
-            padding: '15px 0', 
-            width: '100%', 
-            display: 'flex', 
-            justifyContent: 'center',
-            cursor: 'grab'
-          }}
+        <div
+          className="queue-drag-zone"
+          onTouchStart={onZoneStart}
+          onTouchMove={onZoneMove}
+          onTouchEnd={onZoneEnd}
+          onTouchCancel={() => { zone.current = null; go(position); }}
         >
-          <div className="queue-handle" style={{ margin: 0 }}></div>
-        </div>
-
-        <div className="queue-header-mobile">
-          <div className="queue-title-group">
-              <h3 className="queue-title-main">Coda</h3>
-              {currentSong && <p className="queue-subtitle">In riproduzione da: {currentSong.album?.title || "Album"}</p>}
+          <div className="queue-handle-area">
+            <div className="queue-handle" style={{ margin: 0 }}></div>
           </div>
-          <button className="queue-edit-btn">Modifica</button>
+
+          <div className="queue-header-mobile">
+            <div className="queue-title-group">
+              <h3 className="queue-title-main">Coda</h3>
+              {currentSong && <p className="queue-subtitle">In riproduzione: {currentSong.album?.title || currentSong.title}</p>}
+            </div>
+            <button type="button" className="queue-edit-btn">Modifica</button>
+          </div>
         </div>
 
         {currentSong && (
@@ -357,14 +322,11 @@ const QueueSheetUI = React.memo(({
       </motion.div>
 
       {/* --- BOTTOM BAR --- */}
-      <motion.div 
+      <motion.div
         className="queue-bottom-bar-new"
-        animate={controls} 
-        variants={{
-          hidden: { y: "100%" }, 
-          half: { y: "0%" },     
-          full: { y: "0%" }      
-        }}
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
         transition={springConfig}
       >
           <button className={`nav-rect-btn ${isShuffle ? 'active' : ''}`} onClick={toggleShuffle}>
