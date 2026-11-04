@@ -6,7 +6,7 @@
  *   altrimenti passa in rete come sempre. I brani vengono salvati dalla pagina (src/lib/offline.js).
  * Il nome della cache audio NON cambia con le versioni: aggiornare l'app non deve cancellare i download.
  */
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL_CACHE = `musica-shell-${VERSION}`;
 const ASSETS_CACHE = 'musica-assets';
 const API_CACHE = 'musica-api';
@@ -27,6 +27,9 @@ self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
     await Promise.all(names.filter((n) => n.startsWith('musica-shell-') && n !== SHELL_CACHE).map((n) => caches.delete(n)));
+    // i file /assets cambiano nome a ogni build: quelli vecchi si buttano (e con loro eventuali copie sbagliate)
+    const assets = await caches.open(ASSETS_CACHE);
+    await Promise.all((await assets.keys()).filter((r) => new URL(r.url).pathname.startsWith('/assets/')).map((r) => assets.delete(r)));
     await self.clients.claim();
   })());
 });
@@ -82,7 +85,10 @@ async function cacheFirst(request, cacheName) {
   const cached = await cache.match(request);
   if (cached) return cached;
   const res = await fetch(request);
-  if (res.ok) cache.put(request, res.clone());
+  // uno script o uno stile che arriva come pagina HTML è un errore del server: non va salvato
+  const type = res.headers.get('Content-Type') || '';
+  const wrong = new URL(request.url).pathname.startsWith('/assets/') && /text\/html/i.test(type);
+  if (res.ok && !wrong) cache.put(request, res.clone());
   return res;
 }
 

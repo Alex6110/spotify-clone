@@ -57,6 +57,7 @@ if (fs.existsSync(path.join(dist, 'index.html'))) {
   // il service worker e il manifest non vanno mai tenuti in cache dal browser, altrimenti gli aggiornamenti non arrivano
   app.get(['/sw.js', '/manifest.webmanifest', '/index.html'], (req, res, next) => { res.set('Cache-Control', 'no-cache'); next(); });
   app.use(express.static(dist, { setHeaders: (res, file) => { if (file.includes(`${path.sep}assets${path.sep}`)) res.set('Cache-Control', 'public, max-age=31536000, immutable'); } }));
+  app.use(['/assets', '/covers', '/artist-photos'], (req, res) => res.status(404).end()); // mai la pagina HTML al posto di un file mancante
   app.get('/{*splat}', (req, res) => res.sendFile(path.join(dist, 'index.html')));
 }
 

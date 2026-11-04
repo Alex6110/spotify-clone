@@ -16,6 +16,33 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Se l'app non parte (script non caricato, errore all'avvio) mostra il motivo invece dello schermo nero.
+      (function () {
+        var shown = false;
+        function show(msg) {
+          if (shown || document.getElementById('root').childElementCount) return;
+          shown = true;
+          var d = document.createElement('div');
+          d.style.cssText = 'position:fixed;inset:0;overflow:auto;padding:calc(env(safe-area-inset-top,0px) + 56px) 20px 32px;background:#0a0a0b;color:#fff;font:15px/1.45 -apple-system,system-ui,sans-serif;z-index:99999';
+          d.innerHTML = '<h2 style="margin:0 0 8px;font-size:20px">L\'app non è partita</h2><p style="color:#b3b3b3;margin:0 0 14px">Fai uno screenshot di questa schermata e mandalo.</p><pre style="white-space:pre-wrap;word-break:break-word;background:#1c1c1f;padding:12px;border-radius:8px;font-size:12px;color:#ff9b9b"></pre><button style="margin-top:18px;padding:12px 22px;border-radius:500px;background:#fff;color:#111;font-weight:700;font-size:16px;border:0">Svuota la cache e riavvia</button>';
+          d.querySelector('pre').textContent = msg;
+          d.querySelector('button').onclick = function () {
+            var go = function () { location.reload(); };
+            Promise.resolve(navigator.serviceWorker && navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); }))
+              .then(function () { return window.caches && caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k !== 'musica-audio'; }).map(function (k) { return caches.delete(k); })); }); })
+              .then(go, go);
+          };
+          document.body.appendChild(d);
+        }
+        window.addEventListener('error', function (e) {
+          var t = e.target;
+          show(t && t.src ? 'Non riesco a caricare ' + t.src : (e.message || 'errore') + (e.filename ? '\n' + e.filename + ':' + e.lineno : ''));
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) { show('Errore: ' + (e.reason && (e.reason.message || e.reason))); });
+        setTimeout(function () { show('Dopo 8 secondi la pagina è ancora vuota (nessun errore segnalato).'); }, 8000);
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
