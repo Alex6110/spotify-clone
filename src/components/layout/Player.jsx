@@ -57,6 +57,7 @@ const Player = ({ isMobile }) => {
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
   
   const coverToUse = imgError ? PLACEHOLDER_COVER : coverOf(currentSong);
+  const coverSmall = imgError ? PLACEHOLDER_COVER : coverOf(currentSong, 128);
 
   const handleTogglePlay = () => togglePlay();
   const toggleMute = () => {
@@ -77,7 +78,7 @@ const Player = ({ isMobile }) => {
           <div className="mobile-player-content">
             <img 
               ref={imgRef}
-              src={coverToUse} 
+              src={coverSmall} 
               alt="cover" 
               className="mobile-album-art"
               crossOrigin="anonymous"
@@ -117,7 +118,7 @@ const Player = ({ isMobile }) => {
     <div className="player-bar">
       <div className="player-left">
         <img 
-          src={coverToUse} 
+          src={coverSmall} 
           alt="cover" 
           className="desktop-album-art" 
           onError={() => setImgError(true)} 

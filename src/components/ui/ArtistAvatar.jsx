@@ -4,7 +4,7 @@ import { photoOf, PLACEHOLDER_COVER } from '../../lib/api';
 const ArtistAvatar = ({ artist, size = 96 }) => (
   <img
     className="artist-avatar"
-    src={photoOf(artist)}
+    src={photoOf(artist, 192)}
     alt=""
     width={size}
     height={size}

@@ -125,10 +125,10 @@ const Library = () => {
           <Item key={`p${pl.id}`} view={view} to={`/playlist/${pl.id}`} title={pl.name} sub={`Playlist • ${pl.trackCount} brani`} art={<PlaylistCover covers={pl.covers} className="lib-fill" />} />
         ))}
         {wantAlbums && albums.items.map((a) => (
-          <Item key={`a${a.id}`} view={view} to={`/album/${a.id}`} title={a.title} sub={`Album • ${a.artist}`} art={<img src={coverOf(a)} alt="" loading="lazy" className="lib-fill" />} />
+          <Item key={`a${a.id}`} view={view} to={`/album/${a.id}`} title={a.title} sub={`Album • ${a.artist}`} art={<img src={coverOf(a, view === 'grid' ? 320 : 128)} alt="" loading="lazy" className="lib-fill" />} />
         ))}
         {wantArtists && artists.items.map((a) => (
-          <Item key={`r${a.id}`} view={view} round to={`/artist/${a.id}`} title={a.name} sub={`Artista • ${a.albumCount} album`} art={<img src={photoOf(a)} alt="" loading="lazy" className="lib-fill" />} />
+          <Item key={`r${a.id}`} view={view} round to={`/artist/${a.id}`} title={a.name} sub={`Artista • ${a.albumCount} album`} art={<img src={photoOf(a, view === 'grid' ? 320 : 128)} alt="" loading="lazy" className="lib-fill" />} />
         ))}
       </div>
 

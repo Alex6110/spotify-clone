@@ -13,7 +13,27 @@ router.use(requireAuth());
 
 const DAY = 24 * 3600 * 1000;
 const intParam = (v) => { const n = Number(v); return Number.isInteger(n) && n > 0 ? n : null; };
-const shuffle = (a) => { const r = [...a]; for (let i = r.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; };
+const shuffle = (a, rnd = Math.random) => { const r = [...a]; for (let i = r.length - 1; i > 0; i -= 1) { const j = Math.floor(rnd() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } return r; };
+
+// Casualità "ferma": per lo stesso utente e lo stesso giorno i mix escono sempre uguali (cambiano ogni giorno).
+const dayKey = () => new Date().toLocaleDateString('sv-SE');
+function rngFor(...parts) {
+  let h = 1779033703 ^ String(parts.join('|')).length;
+  for (const ch of `${dayKey()}|${parts.join('|')}`) { h = Math.imul(h ^ ch.charCodeAt(0), 3432918353); h = (h << 13) | (h >>> 19); }
+  let a = Math.imul(h ^ (h >>> 16), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909);
+  return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+// Piccola memoria nel server: i mix e le liste calcolate non si rifanno a ogni apertura.
+const memo = new Map();
+async function memoized(key, ttl, fn) {
+  const hit = memo.get(key);
+  if (hit && Date.now() - hit.t < ttl) return hit.v;
+  const v = await fn();
+  memo.set(key, { t: Date.now(), v });
+  if (memo.size > 600) memo.delete(memo.keys().next().value);
+  return v;
+}
 const uniq = (a) => [...new Set(a)];
 
 const artistSelect = {
@@ -40,7 +60,7 @@ async function topArtistIds(userId, n, listens) {
   let ids = [...score.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
   if (ids.length < n) {
     const more = await prisma.artist.findMany({ where: { albums: { some: {} }, id: { notIn: ids } }, orderBy: { albums: { _count: 'desc' } }, take: n * 2, select: { id: true } });
-    ids = ids.concat(shuffle(more.map((a) => a.id)));
+    ids = ids.concat(shuffle(more.map((a) => a.id), rngFor(userId, 'top')));
   }
   return ids.slice(0, n);
 }
@@ -59,10 +79,10 @@ const withTracks = async (userId, ids) => {
 };
 
 /** Al massimo `perArtist` brani per artista, in ordine casuale. */
-function pickBalanced(rows, perArtist, total) {
+function pickBalanced(rows, perArtist, total, rnd = Math.random) {
   const used = new Map();
   const out = [];
-  for (const r of shuffle(rows)) {
+  for (const r of shuffle(rows, rnd)) {
     const c = used.get(r.artistId) || 0;
     if (c >= perArtist) continue;
     used.set(r.artistId, c + 1);
@@ -136,8 +156,12 @@ router.get('/home', async (req, res) => {
 
 // ---- Artisti simili a quelli che ascolti (Deezer): alcuni sono in libreria, altri no ----
 router.get('/similar', async (req, res) => {
-  const listens = await recentListens(req.userId, 600, 180);
-  const tops = await topArtistIds(req.userId, 4, listens);
+  res.json(await memoized(`similar|${req.userId}`, 20 * 60 * 1000, () => computeSimilar(req.userId)));
+});
+
+async function computeSimilar(userId) {
+  const listens = await recentListens(userId, 600, 180);
+  const tops = await topArtistIds(userId, 4, listens);
   const topRows = tops.length ? await prisma.artist.findMany({ where: { id: { in: tops } }, select: { id: true, name: true } }) : [];
   const topKeys = new Set(topRows.map((a) => normKey(a.name)));
 
@@ -145,7 +169,7 @@ router.get('/similar', async (req, res) => {
     const found = await deezer.searchArtist(a.name);
     return found ? deezer.related(found.id) : [];
   }));
-  if (lists.every((l) => !l.length)) return res.json({ items: [], basedOn: topRows.map((a) => a.name) });
+  if (lists.every((l) => !l.length)) return { items: [], basedOn: topRows.map((a) => a.name) };
 
   const score = new Map();
   lists.forEach((list) => list.forEach((r, i) => {
@@ -164,73 +188,93 @@ router.get('/similar', async (req, res) => {
       ? { name: l.name, libraryId: l.id, photo: l.photo || l.albums[0]?.cover || r.photo, deezerId: r.id }
       : { name: r.name, libraryId: null, photo: r.photo, deezerId: r.id };
   }).filter((i) => i.photo);
-  res.json({ items, basedOn: topRows.map((a) => a.name) });
-});
+  return { items, basedOn: topRows.map((a) => a.name) };
+}
 
 // ---- Contenuto di un mix ----
+// La scelta dei brani si fa una volta al giorno per utente (stessa lista ogni volta che riapri il mix) e si tiene in memoria.
+async function buildGenreMix(rnd, name) {
+  const rows = await playableTrackIds({ album: { genre: name } });
+  if (!rows.length) return null;
+  return { title: `Mix ${name}`, ids: pickBalanced(rows, 3, 40, rnd) };
+}
+
+async function buildArtistMix(rnd, id) {
+  const artist = await prisma.artist.findUnique({ where: { id }, select: { id: true, name: true, albums: { select: { genre: true } } } });
+  if (!artist) return null;
+
+  // artisti vicini presenti in libreria: prima quelli "simili" di Deezer, poi lo stesso genere
+  let simIds = [];
+  const found = await deezer.searchArtist(artist.name);
+  if (found) {
+    const rel = await deezer.related(found.id);
+    const keys = rel.map((r) => normKey(r.name));
+    const local = await prisma.artist.findMany({ where: { albums: { some: {} }, id: { not: artist.id } }, select: { id: true, key: true } });
+    const byKey = new Map(local.map((a) => [normKey(a.key), a.id]));
+    simIds = keys.map((k) => byKey.get(k)).filter(Boolean);
+  }
+  if (simIds.length < 4) {
+    const genres = uniq(artist.albums.map((a) => a.genre).filter(Boolean));
+    if (genres.length) {
+      const g = await prisma.artist.findMany({ where: { id: { not: artist.id, notIn: simIds }, albums: { some: { genre: { in: genres } } } }, select: { id: true }, take: 80 });
+      simIds = simIds.concat(shuffle(g.map((a) => a.id), rnd).slice(0, 8 - simIds.length));
+    }
+  }
+  simIds = uniq(simIds).slice(0, 8);
+
+  const own = pickBalanced(await playableTrackIds({ artistId: artist.id }), 40, 20, rnd);
+  const others = simIds.length ? pickBalanced(await playableTrackIds({ artistId: { in: simIds } }), 3, 20, rnd) : [];
+  const ids = [];
+  for (let i = 0; i < Math.max(own.length, others.length); i += 1) { if (own[i]) ids.push(own[i]); if (others[i]) ids.push(others[i]); }
+  return { title: `${artist.name} Mix`, artistName: artist.name, ids };
+}
+
 router.get('/mix', async (req, res) => {
   const userId = req.userId;
   const kind = String(req.query.kind || '');
+  let plan;
 
   if (kind === 'genre') {
     const name = String(req.query.name || '').trim();
     if (!name) return res.status(400).json({ error: 'Genere mancante' });
-    const rows = await playableTrackIds({ album: { genre: name } });
-    if (!rows.length) return res.status(404).json({ error: 'Nessun brano per questo genere' });
-    const tracks = await withTracks(userId, pickBalanced(rows, 3, 40));
-    return res.json({ title: `Mix ${name}`, subtitle: uniq(tracks.map((t) => t.artist)).slice(0, 3).join(', ') + ' e altro', tracks });
-  }
-
-  if (kind === 'artist') {
+    plan = await memoized(`mix|${userId}|${dayKey()}|genre|${name}`, 6 * 3600 * 1000, () => buildGenreMix(rngFor(userId, 'genre', name), name));
+    if (!plan) return res.status(404).json({ error: 'Nessun brano per questo genere' });
+  } else if (kind === 'artist') {
     const id = intParam(req.query.id);
-    const artist = id ? await prisma.artist.findUnique({ where: { id }, select: { id: true, name: true, albums: { select: { genre: true } } } }) : null;
-    if (!artist) return res.status(404).json({ error: 'Artista non trovato' });
-
-    // artisti vicini presenti in libreria: prima quelli "simili" di Deezer, poi lo stesso genere
-    let simIds = [];
-    const found = await deezer.searchArtist(artist.name);
-    if (found) {
-      const rel = await deezer.related(found.id);
-      const keys = rel.map((r) => normKey(r.name));
-      const local = await prisma.artist.findMany({ where: { albums: { some: {} }, id: { not: artist.id } }, select: { id: true, key: true } });
-      const byKey = new Map(local.map((a) => [normKey(a.key), a.id]));
-      simIds = keys.map((k) => byKey.get(k)).filter(Boolean);
-    }
-    if (simIds.length < 4) {
-      const genres = uniq(artist.albums.map((a) => a.genre).filter(Boolean));
-      if (genres.length) {
-        const g = await prisma.artist.findMany({ where: { id: { not: artist.id, notIn: simIds }, albums: { some: { genre: { in: genres } } } }, select: { id: true }, take: 80 });
-        simIds = simIds.concat(shuffle(g.map((a) => a.id)).slice(0, 8 - simIds.length));
-      }
-    }
-    simIds = uniq(simIds).slice(0, 8);
-
-    const own = pickBalanced(await playableTrackIds({ artistId: artist.id }), 40, 20);
-    const others = simIds.length ? pickBalanced(await playableTrackIds({ artistId: { in: simIds } }), 3, 20) : [];
-    const ids = [];
-    for (let i = 0; i < Math.max(own.length, others.length); i += 1) { if (own[i]) ids.push(own[i]); if (others[i]) ids.push(others[i]); }
-    const tracks = await withTracks(userId, ids);
-    const names = uniq(tracks.map((t) => t.artist));
-    const subtitle = `${[artist.name, ...names.filter((n) => n !== artist.name)].slice(0, 3).join(', ')}${names.length > 3 ? ' e altro' : ''}`;
-    return res.json({ title: `${artist.name} Mix`, subtitle, tracks });
+    plan = id ? await memoized(`mix|${userId}|${dayKey()}|artist|${id}`, 6 * 3600 * 1000, () => buildArtistMix(rngFor(userId, 'artist', id), id)) : null;
+    if (!plan) return res.status(404).json({ error: 'Artista non trovato' });
+  } else {
+    return res.status(400).json({ error: 'Tipo di mix non valido' });
   }
 
-  return res.status(400).json({ error: 'Tipo di mix non valido' });
+  const tracks = await withTracks(userId, plan.ids);
+  const names = uniq(tracks.map((t) => t.artist));
+  const subtitle = kind === 'genre'
+    ? `${names.slice(0, 3).join(', ')} e altro`
+    : `${[plan.artistName, ...names.filter((n) => n !== plan.artistName)].slice(0, 3).join(', ')}${names.length > 3 ? ' e altro' : ''}`;
+  res.json({ title: plan.title, subtitle, tracks });
 });
 
 // ---- Sfoglia (pagina Cerca): generi con una copertina + album da riscoprire ----
 router.get('/explore', async (req, res) => {
-  const rows = await prisma.album.groupBy({ by: ['genre'], where: { genre: { not: null } }, _count: { _all: true } });
-  const genres = rows.filter((r) => r.genre?.trim()).sort((a, b) => b._count._all - a._count._all).slice(0, 24);
-  const withCover = await Promise.all(genres.map(async (r) => {
-    const al = await prisma.album.findFirst({ where: { genre: r.genre, cover: { not: null } }, orderBy: { id: 'desc' }, select: { cover: true } });
-    return { name: r.genre, albumCount: r._count._all, cover: al?.cover ?? null };
-  }));
-  const ids = (await prisma.album.findMany({ where: { cover: { not: null } }, select: { id: true } })).map((a) => a.id);
-  const pick = shuffle(ids).slice(0, 12);
-  const albums = pick.length ? await prisma.album.findMany({ where: { id: { in: pick } }, select: albumSelect }) : [];
-  const byId = new Map(albums.map((a) => [a.id, a]));
-  res.json({ genres: withCover, rediscover: pick.map((id) => byId.get(id)).filter(Boolean).map(albumDto) });
+  // generi e identificativi degli album cambiano di rado: si tengono un'ora in memoria
+  const base = await memoized('explore-base', 3600 * 1000, async () => {
+    const rows = await prisma.album.groupBy({ by: ['genre'], where: { genre: { not: null } }, _count: { _all: true } });
+    const genres = rows.filter((r) => r.genre?.trim()).sort((a, b) => b._count._all - a._count._all).slice(0, 24);
+    const withCover = await Promise.all(genres.map(async (r) => {
+      const al = await prisma.album.findFirst({ where: { genre: r.genre, cover: { not: null } }, orderBy: { id: 'desc' }, select: { cover: true } });
+      return { name: r.genre, albumCount: r._count._all, cover: al?.cover ?? null };
+    }));
+    const ids = (await prisma.album.findMany({ where: { cover: { not: null } }, select: { id: true } })).map((a) => a.id);
+    return { genres: withCover, ids };
+  });
+  const rediscover = await memoized(`explore|${req.userId}|${dayKey()}`, 6 * 3600 * 1000, async () => {
+    const pick = shuffle(base.ids, rngFor(req.userId, 'explore')).slice(0, 12);
+    const albums = pick.length ? await prisma.album.findMany({ where: { id: { in: pick } }, select: albumSelect }) : [];
+    const byId = new Map(albums.map((a) => [a.id, a]));
+    return pick.map((id) => byId.get(id)).filter(Boolean).map(albumDto);
+  });
+  res.json({ genres: base.genres, rediscover });
 });
 
 // ---- Artisti fuori libreria ----

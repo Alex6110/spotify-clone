@@ -2,6 +2,7 @@ const config = require('./config'); // deve essere il primo require: carica .env
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const { thumbMiddleware } = require('./lib/thumbs');
 const express = require('express');
 const cors = require('cors');
 
@@ -35,8 +36,8 @@ app.use(express.json({ limit: '512kb', type: ['application/json', 'text/plain'] 
 
 // File pubblici (nessun dato personale): cover e foto artisti
 const staticOpts = { maxAge: '30d', fallthrough: true };
-app.use('/covers', express.static(config.coversDir, staticOpts));
-app.use('/artist-photos', express.static(config.artistPhotosDir, staticOpts));
+app.use('/covers', thumbMiddleware('covers', config.coversDir), express.static(config.coversDir, staticOpts));
+app.use('/artist-photos', thumbMiddleware('artist-photos', config.artistPhotosDir), express.static(config.artistPhotosDir, staticOpts));
 
 // API (tutte protette, tranne /api/auth/*)
 app.use('/api/auth', authRouter);

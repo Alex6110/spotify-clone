@@ -41,7 +41,7 @@ export const PlayerProvider = ({ children }) => {
   const [remoteThemeUpdates, setRemoteThemeUpdates] = useState(null);
 
   const audioRef = useRef(null);
-  if (audioRef.current === null) audioRef.current = new Audio();
+  if (audioRef.current === null) { audioRef.current = new Audio(); audioRef.current.preload = 'auto'; }
   const socketRef = useRef(null);
   const timerRef = useRef(null);
   const listenRef = useRef({ id: null, ms: 0 });
@@ -154,6 +154,21 @@ export const PlayerProvider = ({ children }) => {
       if (isPlayable(cand)) { startTrack(cand); return; }
     }
   }, [seekTo, startTrack]);
+
+  // ---------- Il brano successivo si prepara mentre suona quello corrente ----------
+  // Si chiede solo l'inizio del file: il server lo legge dal disco (che intanto si sveglia) e la connessione resta calda, così il cambio è immediato.
+  useEffect(() => {
+    if (!currentSong || !isPlaying || !isLocalAudioActive || queue.length === 0) return undefined;
+    const idx = queue.findIndex((s) => s.id === currentSong.id);
+    const next = queue.slice(idx + 1).find(isPlayable) || (repeatMode === 1 ? queue.find(isPlayable) : null);
+    if (!next || next.id === currentSong.id) return undefined;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      fetch(streamUrl(next), { headers: { Range: 'bytes=0-524287' }, cache: 'no-store', signal: ctrl.signal })
+        .then((r) => r.arrayBuffer()).catch(() => {});
+    }, 3000);
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, [currentSong, isPlaying, isLocalAudioActive, queue, repeatMode]);
 
   // ---------- Fine brano ----------
   useEffect(() => {

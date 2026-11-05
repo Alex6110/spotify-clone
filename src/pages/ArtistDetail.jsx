@@ -48,7 +48,7 @@ const ArtistDetail = () => {
         <div className="album-grid">
           {artist.albums.map((a) => (
             <Link to={`/album/${a.id}`} key={a.id} className="album-card">
-              <img src={coverOf(a)} alt="" className="album-cover" loading="lazy" />
+              <img src={coverOf(a, 320)} alt="" className="album-cover" loading="lazy" />
               <p>{a.title}</p>
               <span>{a.year || ''}</span>
             </Link>

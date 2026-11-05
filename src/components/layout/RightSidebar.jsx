@@ -25,7 +25,7 @@ const DesktopQueueItem = ({ song, playSong }) => {
         zIndex: isDragging ? 50 : 1,
       }}
     >
-      <img src={coverOf(song)} alt="" className="queue-row-cover" />
+      <img src={coverOf(song, 96)} alt="" className="queue-row-cover" />
       <div className="queue-row-text" onClick={() => playSong(song)}>
         <p className="queue-row-title">{song.title}</p>
         <p className="queue-row-artist">{song.artist}</p>

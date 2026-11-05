@@ -138,7 +138,7 @@ const MenuLayer = ({ track, rect, onRemove, removeLabel, onClose }) => {
 
   const head = (
     <div className="menu-head">
-      <img src={coverOf(track)} alt="" />
+      <img src={coverOf(track, 128)} alt="" />
       <div><strong>{track.title}</strong><span>{track.artist}</span></div>
     </div>
   );

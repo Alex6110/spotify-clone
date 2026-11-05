@@ -14,7 +14,7 @@ export function readAuth() {
 export function writeAuth(value) {
   try {
     if (value) localStorage.setItem(AUTH_KEY, JSON.stringify(value));
-    else localStorage.removeItem(AUTH_KEY);
+    else { localStorage.removeItem(AUTH_KEY); clearSwr(); }
   } catch { /* storage non disponibile: la sessione resta solo in memoria */ }
 }
 
@@ -38,8 +38,33 @@ api.interceptors.response.use(
 );
 
 export const assetUrl = (path) => (path ? (/^https?:/.test(path) ? path : BASE + path) : null);
-export const coverOf = (item) => assetUrl(item?.cover) || PLACEHOLDER_COVER;
-export const photoOf = (artist) => assetUrl(artist?.photo) || assetUrl(artist?.cover) || PLACEHOLDER_COVER;
+
+// Con una larghezza (in pixel) il server manda una miniatura WebP leggera, invece del file originale: ?w=128 per le righe, 320 per le schede.
+// Senza larghezza si ottiene l'originale (copertine grandi). Gli indirizzi esterni (es. foto Deezer) restano com'erano.
+const sized = (path, w) => {
+  const url = assetUrl(path);
+  if (!url || !w || /^https?:/.test(path) || !/^\/(covers|artist-photos)\//.test(path)) return url;
+  return `${url}${url.includes('?') ? '&' : '?'}w=${w}`;
+};
+export const coverOf = (item, w) => sized(item?.cover, w) || PLACEHOLDER_COVER;
+export const photoOf = (artist, w) => sized(artist?.photo, w) || sized(artist?.cover, w) || PLACEHOLDER_COVER;
+
+// ---------- Mostra subito l'ultima risposta, aggiorna in sottofondo ----------
+const swrKey = (url) => `swr:${(readAuth()?.token || '').slice(-16)}:${url}`;
+/** GET con copia salvata: onData(dati, daCopia). Se la rete è lenta l'utente vede subito l'ultima versione. */
+export function swrGet(url, onData, onError) {
+  try {
+    const c = JSON.parse(localStorage.getItem(swrKey(url)));
+    if (c?.data) onData(c.data, true);
+  } catch { /* nessuna copia */ }
+  return api.get(url).then((res) => {
+    onData(res.data, false);
+    try { localStorage.setItem(swrKey(url), JSON.stringify({ at: Date.now(), data: res.data })); } catch { /* spazio finito: pazienza */ }
+  }).catch((err) => onError?.(err));
+}
+export function clearSwr() {
+  try { Object.keys(localStorage).filter((k) => k.startsWith('swr:')).forEach((k) => localStorage.removeItem(k)); } catch { /* niente */ }
+}
 
 /** URL di streaming di un brano. Il token è in query perché <audio> non può inviare header. */
 export function streamUrl(track, { download = false } = {}) {

@@ -11,6 +11,7 @@
     "doctor": "node scripts/doctor.js",
     "richieste": "node scripts/requests.js",
     "artwork": "node scripts/artwork.js",
+    "thumbs": "node scripts/thumbs.js",
     "curator": "node --disable-warning=ExperimentalWarning curator/index.js",
     "smoke": "node scripts/smoke.js",
     "test": "node --test test/*.test.js",

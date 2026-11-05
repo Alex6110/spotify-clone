@@ -15,7 +15,7 @@ const TrackList = ({ tracks, onRemove, removeLabel }) => {
         return (
           <div key={`${t.id}-${t.position ?? i}`} className={`track-row ${isCurrent ? 'active-song' : ''} ${isPlayable(t) ? '' : 'is-broken'}`} onClick={() => playSong(t, tracks)}>
             <div className="track-row-cover">
-              <img src={coverOf(t)} alt="" loading="lazy" />
+              <img src={coverOf(t, 128)} alt="" loading="lazy" />
               {isCurrent && <span className="track-row-eq"><Equalizer playing={isPlaying} /></span>}
             </div>
             <div className="track-row-text">

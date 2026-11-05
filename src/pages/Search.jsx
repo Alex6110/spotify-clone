@@ -4,7 +4,7 @@ import { Search as SearchIcon, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { readHistory, addHistory, removeHistory, clearHistory, historyKey } from '../lib/searchHistory';
 import { PlayerContext } from '../context/PlayerContext';
-import { api, coverOf, photoOf, errorMessage, formatDuration, isPlayable } from '../lib/api';
+import { api, swrGet, coverOf, photoOf, errorMessage, formatDuration, isPlayable } from '../lib/api';
 import { useIsMobile } from '../lib/useIsMobile';
 import MobileHeader from '../components/layout/MobileHeader';
 import ArtistAvatar from '../components/ui/ArtistAvatar';
@@ -38,7 +38,7 @@ const Search = () => {
   useEffect(() => {
     if (!isMobile) return undefined;
     let alive = true;
-    api.get('/api/discover/explore').then((r) => alive && setExplore(r.data)).catch(() => {});
+    swrGet('/api/discover/explore', (d) => alive && setExplore(d));
     return () => { alive = false; };
   }, [isMobile]);
 
@@ -120,7 +120,7 @@ const Search = () => {
               <div className="shelf-row">
                 {explore.rediscover.map((a) => (
                   <Link key={a.id} to={`/album/${a.id}`} className="dcard">
-                    <img src={coverOf(a)} alt="" className="dcard-img" loading="lazy" />
+                    <img src={coverOf(a, 320)} alt="" className="dcard-img" loading="lazy" />
                     <p className="dcard-title">{a.title}</p>
                     <p className="dcard-sub">{a.artist}</p>
                   </Link>
@@ -136,7 +136,7 @@ const Search = () => {
                 {explore.genres.map((g) => (
                   <Link key={g.name} to={`/library?tab=albums&genre=${encodeURIComponent(g.name)}`} className="genre-tile" style={{ '--tile-h': hueOf(g.name) }}>
                     <span>{g.name}</span>
-                    {g.cover && <img src={coverOf(g)} alt="" loading="lazy" />}
+                    {g.cover && <img src={coverOf(g, 192)} alt="" loading="lazy" />}
                   </Link>
                 ))}
               </div>
@@ -158,7 +158,7 @@ const Search = () => {
                     {h.type === 'query' ? (
                       <span className="hist-ico"><SearchIcon size={20} /></span>
                     ) : (
-                      <img src={h.type === 'artist' ? photoOf(h) : coverOf(h)} alt="" className={h.type === 'artist' ? 'is-round' : ''} loading="lazy" />
+                      <img src={h.type === 'artist' ? photoOf(h, 128) : coverOf(h, 128)} alt="" className={h.type === 'artist' ? 'is-round' : ''} loading="lazy" />
                     )}
                     <span className="hist-text">
                       <strong>{h.title}</strong>
@@ -194,7 +194,7 @@ const Search = () => {
               <div className="track-list">
                 {results.tracks.map((t) => (
                   <div key={t.id} className={`track-row ${currentSong?.id === t.id ? 'active-song' : ''} ${isPlayable(t) ? '' : 'is-broken'}`} onClick={() => { remember(trackEntry(t)); playSong(t, results.tracks); }}>
-                    <img src={coverOf(t)} alt="" loading="lazy" />
+                    <img src={coverOf(t, 128)} alt="" loading="lazy" />
                     <div className="track-row-text">
                       <span className="song-name">{t.title}</span>
                       <span className="song-sub">{isPlayable(t) ? `${t.artist} · ${t.album}` : 'File danneggiato o incompleto'}</span>
@@ -214,7 +214,7 @@ const Search = () => {
               <div className="horizontal-scroll">
                 {results.albums.map((a) => (
                   <Link to={`/album/${a.id}`} key={a.id} className="album-card" onClick={() => remember(albumEntry(a))}>
-                    <img src={coverOf(a)} alt="" className="album-cover" loading="lazy" />
+                    <img src={coverOf(a, 320)} alt="" className="album-cover" loading="lazy" />
                     <p>{a.title}</p>
                     <span>{a.artist}</span>
                   </Link>

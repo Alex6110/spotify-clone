@@ -431,7 +431,7 @@ const MobileQueue = ({ onClose }) => {
     reorderQueue([...historyAndCurrent, ...newUpcomingOrder]); 
   }, [safeQueue, currentSongId, reorderQueue]);
 
-  const getCoverUrl = useCallback((song) => coverOf(song), []);
+  const getCoverUrl = useCallback((song) => coverOf(song, 128), []);
 
   return (
     <QueueSheetUI

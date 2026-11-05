@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart } from 'lucide-react';
-import { api, coverOf, photoOf, PLACEHOLDER_COVER, errorMessage } from '../lib/api';
+import { api, swrGet, coverOf, photoOf, PLACEHOLDER_COVER, errorMessage } from '../lib/api';
 import ArtistAvatar from '../components/ui/ArtistAvatar';
 import '../styles/discover.css';
 
@@ -25,7 +25,7 @@ const MixCard = ({ mix }) => {
   return (
     <Link to={to} className="dcard mix-card">
       <div className="mix-art" style={{ '--mix-h': hueOf(mix.title) }}>
-        <Img src={mix.kind === 'artist' ? photoOf(mix) : coverOf(mix)} />
+        <Img src={mix.kind === 'artist' ? photoOf(mix, 320) : coverOf(mix, 320)} />
         <span className="mix-label"><i />{mix.kind === 'artist' ? `${label} Mix` : mix.title}</span>
       </div>
       <p className="dcard-sub">Playlist</p>
@@ -41,9 +41,11 @@ function Home() {
 
   useEffect(() => {
     let alive = true;
-    api.get('/api/discover/home').then((res) => alive && setData(res.data)).catch((e) => alive && setError(errorMessage(e)));
+    let have = false;
+    // l'ultima Home appare subito (da copia salvata) e si aggiorna appena il server risponde
+    swrGet('/api/discover/home', (d) => { if (alive) { have = true; setData(d); setError(''); } }, (e) => { if (alive && !have) setError(errorMessage(e)); });
     // gli artisti simili vengono da Deezer: arrivano dopo, senza far aspettare il resto della pagina
-    api.get('/api/discover/similar').then((res) => alive && setSimilar(res.data.items || [])).catch(() => alive && setSimilar([]));
+    swrGet('/api/discover/similar', (d) => alive && setSimilar(d.items || []), () => alive && setSimilar((s) => s ?? []));
     return () => { alive = false; };
   }, []);
 
@@ -62,7 +64,7 @@ function Home() {
               </Link>
             ) : (
               <Link key={q.id} to={`/album/${q.id}`} className="quick-tile">
-                <Img src={coverOf(q)} className="quick-img" />
+                <Img src={coverOf(q, 128)} className="quick-img" />
                 <span className="quick-title">{q.title}</span>
               </Link>
             )
@@ -74,7 +76,7 @@ function Home() {
         <Shelf title="Continua ad ascoltare">
           {data.continue.map((a) => (
             <Link key={a.id} to={`/album/${a.id}`} className="dcard">
-              <Img src={coverOf(a)} className="dcard-img" />
+              <Img src={coverOf(a, 320)} className="dcard-img" />
               <p className="dcard-title">{a.title}</p>
               <p className="dcard-sub">Album • {a.artist}</p>
             </Link>
@@ -125,7 +127,7 @@ function Home() {
       <Shelf title="Aggiunti di recente">
         {data.newest.map((a) => (
           <Link key={a.id} to={`/album/${a.id}`} className="dcard">
-            <Img src={coverOf(a)} className="dcard-img" />
+            <Img src={coverOf(a, 320)} className="dcard-img" />
             <p className="dcard-title">{a.title}</p>
             <p className="dcard-sub">{a.artist}</p>
           </Link>

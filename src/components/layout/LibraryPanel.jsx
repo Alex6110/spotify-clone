@@ -50,7 +50,7 @@ const LibraryPanel = () => {
         {albums.map((a) => (
           <NavLink key={a.id} to={`/album/${a.id}`} className={`lib-item ${location.pathname === `/album/${a.id}` ? 'active' : ''}`}>
             <img
-              src={coverOf(a)}
+              src={coverOf(a, 128)}
               alt=""
               loading="lazy"
               onError={(e) => { if (!e.currentTarget.src.endsWith(PLACEHOLDER_COVER)) e.currentTarget.src = PLACEHOLDER_COVER; }}
