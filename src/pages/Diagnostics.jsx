@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Copy } from 'lucide-react';
+import { Copy, Gauge } from 'lucide-react';
 import { isStandalone } from '../lib/pwa';
+import { api, apiBase, streamUrl, coverOf } from '../lib/api';
 import '../styles/Home.css';
 
 // Pagina tecnica: misura lo schermo come lo vede l'app. Serve a capire problemi di layout su iPhone
@@ -29,6 +30,93 @@ const FillProbe = ({ onClose }) => {
       <div style={{ ...box, top: '50%', background: '#000', color: '#fff', font: '600 15px system-ui', padding: 12, textAlign: 'center' }}>
         Scatta uno screenshot e mandalo. Tocca per chiudere.
       </div>
+    </div>
+  );
+};
+
+const median = (a) => { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+const now = () => performance.now();
+
+// Misura da dove arriva la lentezza: rete verso il server, copertine, disco del server, partenza di un brano.
+const SpeedTest = () => {
+  const [lines, setLines] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const say = (l) => setLines((p) => [...p, l]);
+
+  const run = async () => {
+    setBusy(true); setLines([]);
+    const verdict = [];
+    try {
+      // 1) rete: tempo di risposta di una richiesta minuscola
+      const rtts = [];
+      for (let i = 0; i < 6; i += 1) {
+        const t0 = now();
+        await fetch(`${apiBase}/api/health?n=${Math.random()}`, { cache: 'no-store' });
+        rtts.push(now() - t0);
+      }
+      const rtt = Math.round(median(rtts));
+      say(`Rete → server: ${rtt} ms a richiesta (minimo ${Math.round(Math.min(...rtts))} ms)`);
+      if (rtt > 150) verdict.push('La rete verso il Mac è lenta già per una richiesta minuscola: ogni copertina e ogni brano paga questo ritardo. Controlla che Tailscale sia in connessione diretta e non tramite relay.');
+
+      // 2) copertine: 12 miniature insieme, come in Home
+      const albums = (await api.get('/api/library/albums', { params: { limit: 12, sort: 'recent' } })).data.items.filter((a) => a.cover);
+      if (albums.length) {
+        const t0 = now();
+        const sizes = await Promise.all(albums.map(async (a) => {
+          const r = await fetch(`${coverOf(a, 128)}&n=${Math.random()}`, { cache: 'no-store' });
+          return (await r.arrayBuffer()).byteLength;
+        }));
+        const ms = Math.round(now() - t0);
+        say(`${albums.length} miniature insieme: ${ms} ms (in media ${Math.round(sizes.reduce((x, y) => x + y, 0) / sizes.length / 1024)} KB l'una)`);
+        const t1 = now();
+        const big = await (await fetch(`${coverOf(albums[0])}${coverOf(albums[0]).includes('?') ? '&' : '?'}n=${Math.random()}`, { cache: 'no-store' })).arrayBuffer();
+        say(`Una copertina originale: ${Math.round(now() - t1)} ms (${Math.round(big.byteLength / 1024)} KB)`);
+        if (ms > 1500) verdict.push('Le copertine impiegano troppo anche se sono piccole: è la rete (o il server occupato), non il peso dei file.');
+      }
+
+      // 3) disco del server
+      try {
+        const d = (await api.get('/api/stream/diag')).data;
+        say(`Disco del server: ${d.files.map((f) => `${f.ms} ms`).join(', ') || 'nessun file letto'} (lettura dei primi 512 KB di brani a caso)`);
+        if (d.maxMs > 400) verdict.push('Il disco del Mac risponde lentamente alla prima lettura (probabile sospensione dell\'SSD o risparmio energetico).');
+      } catch { say('Disco del server: misura non disponibile (aggiorna e riavvia il server)'); }
+
+      // 4) partenza di un brano
+      const tracks = (await api.get('/api/library/recent')).data.items;
+      const track = tracks[0] || (albums[0] && (await api.get(`/api/library/albums/${albums[0].id}`)).data.tracks[0]);
+      if (track) {
+        const fetchStart = async () => {
+          const t0 = now();
+          const r = await fetch(`${streamUrl(track)}&n=${Math.random()}`, { headers: { Range: 'bytes=0-524287' }, cache: 'no-store' });
+          const first = now() - t0;
+          const buf = await r.arrayBuffer();
+          const total = now() - t0;
+          return { first: Math.round(first), total: Math.round(total), kbs: Math.round((buf.byteLength / 1024) / (total / 1000)) };
+        };
+        const a = await fetchStart();
+        const b = await fetchStart();
+        say(`Brano "${track.title}" (${track.format || '?'}): primi dati dopo ${a.first} ms, 512 KB in ${a.total} ms (${a.kbs} KB/s)`);
+        say(`Stesso brano, seconda volta: primi dati ${b.first} ms, ${b.total} ms (${b.kbs} KB/s)`);
+        if (a.first - b.first > 300) verdict.push('La prima lettura di un brano è molto più lenta della seconda: pesa il disco o il server, non la banda.');
+        if (b.kbs < 800) verdict.push(`Velocità di trasferimento bassa (${b.kbs} KB/s): un FLAC da 30 MB richiederebbe più di mezzo minuto per arrivare intero.`);
+      }
+      say(verdict.length ? `\nCOSA EMERGE:\n- ${verdict.join('\n- ')}` : '\nNessun collo di bottiglia evidente da questo telefono.');
+    } catch (e) {
+      say(`Errore durante il test: ${e?.message || e}`);
+    }
+    setBusy(false);
+  };
+
+  const copy = () => { try { navigator.clipboard?.writeText(lines.join('\n')); } catch { /* non disponibile */ } };
+  return (
+    <div style={{ marginTop: 28 }}>
+      <h3>Test velocità</h3>
+      <p className="muted-text">Misura dove si perde tempo: rete, copertine, disco del Mac, partenza di un brano. Lancialo sia sul Wi-Fi di casa sia con la rete mobile.</p>
+      <div className="diag-actions">
+        <button type="button" className="pill-btn primary" onClick={run} disabled={busy}><Gauge size={16} /> {busy ? 'Misuro…' : 'Avvia il test'}</button>
+        {lines.length > 0 && <button type="button" className="pill-btn" onClick={copy}><Copy size={16} /> Copia il risultato</button>}
+      </div>
+      {lines.length > 0 && <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.5, marginTop: 14 }}>{lines.join('\n')}</pre>}
     </div>
   );
 };
@@ -75,6 +163,7 @@ const Diagnostics = () => {
         <button type="button" className="pill-btn" onClick={copy}><Copy size={16} /> Copia i dati</button>
         <button type="button" className="pill-btn primary" onClick={() => setProbe(true)}>Prova riempimento schermo</button>
       </div>
+      <SpeedTest />
       {probe && <FillProbe onClose={() => setProbe(false)} />}
       <div ref={probes} className="diag-probes" aria-hidden="true">
         <div className="p-vh" style={{ height: '100vh' }} />

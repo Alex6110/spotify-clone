@@ -41,6 +41,8 @@ export const PlayerProvider = ({ children }) => {
   const [remoteThemeUpdates, setRemoteThemeUpdates] = useState(null);
 
   const audioRef = useRef(null);
+  // punto in cui riprendere dopo la riapertura dell'app: finché l'audio non è partito vale questo, non il tempo dell'elemento <audio> (ancora a 0)
+  const pendingSeekRef = useRef(null);
   if (audioRef.current === null) { audioRef.current = new Audio(); audioRef.current.preload = 'auto'; }
   const socketRef = useRef(null);
   const timerRef = useRef(null);
@@ -79,6 +81,7 @@ export const PlayerProvider = ({ children }) => {
     setCurrentTime(0);
     setDuration(0);
     audio.pause();
+    pendingSeekRef.current = null;
     setCurrentSong(song);
     audio.src = streamUrl(song);
     listenRef.current = { id: song.id, ms: 0 };
@@ -139,6 +142,7 @@ export const PlayerProvider = ({ children }) => {
     setIsLocalAudioActive(true);
     audioRef.current.muted = false;
     audioRef.current.currentTime = time;
+    if (pendingSeekRef.current !== null) pendingSeekRef.current = time;
     setCurrentTime(time);
     emit('SEEK', { time });
   }, [emit]);
@@ -259,7 +263,17 @@ export const PlayerProvider = ({ children }) => {
       setCurrentTime(data.currentTime || 0);
       audio.src = streamUrl(data.track);
       listenRef.current = { id: null, ms: 0 }; // il ripristino non conta come ascolto
-      audio.addEventListener('loadedmetadata', () => { audio.currentTime = data.currentTime || 0; }, { once: true });
+      // iPhone non carica nulla finché non premi play: il punto si applica appena i dati arrivano, e intanto è quello che si salva
+      const at = data.currentTime || 0;
+      pendingSeekRef.current = at > 1 ? at : null;
+      const applySeek = () => { if (pendingSeekRef.current !== null) audio.currentTime = pendingSeekRef.current; };
+      audio.addEventListener('loadedmetadata', applySeek, { once: true });
+      audio.addEventListener('canplay', () => {
+        if (pendingSeekRef.current !== null && Math.abs(audio.currentTime - pendingSeekRef.current) > 2) audio.currentTime = pendingSeekRef.current;
+        pendingSeekRef.current = null;
+      }, { once: true });
+      // scalda il brano: il server lo legge dal disco prima che tu prema play
+      fetch(streamUrl(data.track), { headers: { Range: 'bytes=0-524287' }, cache: 'no-store' }).then((r) => r.arrayBuffer()).catch(() => {});
     }).catch(() => { /* nessuno stato salvato */ });
     return () => { cancelled = true; };
   }, [userId]);
@@ -269,7 +283,7 @@ export const PlayerProvider = ({ children }) => {
     const s = stateRef.current;
     if (!s.currentSong) return null;
     const q = s.originalQueue.length > 0 ? s.originalQueue : s.queue;
-    return { trackId: s.currentSong.id, currentTime: audioRef.current.currentTime || 0, queue: queueIds(q, s.currentSong.id) };
+    return { trackId: s.currentSong.id, currentTime: pendingSeekRef.current ?? (audioRef.current.currentTime || 0), queue: queueIds(q, s.currentSong.id) };
   }, []);
 
   const saveState = useCallback(() => {
